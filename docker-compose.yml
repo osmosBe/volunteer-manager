@@ -1,0 +1,15 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      APP_NAME: "ST. PRIDE Volunteer Management"
+      APP_VERSION: "0.1.0"
+      ENVIRONMENT: "development"
+      DATABASE_URL: "sqlite:////data/app.db"
+    volumes:
+      - app-data:/data
+
+volumes:
+  app-data:
