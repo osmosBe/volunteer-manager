@@ -1,0 +1,23 @@
+[project]
+name = "st-pride-volunteer-management"
+version = "0.1.0"
+description = "A lightweight volunteer management application scaffold for ST. PRIDE."
+readme = "README.md"
+requires-python = ">=3.13"
+license = { text = "MIT" }
+
+[tool.black]
+line-length = 88
+target-version = ["py313"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
