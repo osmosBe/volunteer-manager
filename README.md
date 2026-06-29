@@ -102,3 +102,83 @@ ruff check .
 black --check .
 pytest
 ```
+
+## Microsoft Entra ID Admin Login with Azure Container Apps EasyAuth
+
+Milestone 2 uses Azure Container Apps built-in Authentication / Authorization (EasyAuth) for Microsoft Entra ID sign-in. Azure Portal manages the Entra App Registration and its client secret. The FastAPI application does not implement OpenID Connect itself and does not require `ENTRA_CLIENT_SECRET` for admin login.
+
+Azure authenticates the user before the request reaches the app. The application then performs app-level authorization with a small auth-provider abstraction that supports `AUTH_MODE=disabled` for local development and `AUTH_MODE=easyauth` for Azure EasyAuth headers. The rest of the app uses auth helpers instead of parsing headers directly.
+
+The public `/healthz` and `/` routes remain unauthenticated. The `/admin` route is protected by app-level authorization.
+
+> **Security warning:** EasyAuth headers must never be trusted unless the application is deployed behind Azure Container Apps Authentication / Authorization. Set `AUTH_MODE=easyauth` only in that protected Azure runtime.
+
+### Runtime Configuration
+
+All application configuration is loaded through the central Pydantic Settings class. Do not read application configuration directly from `os.getenv` in business code.
+
+Required runtime variables:
+
+| Variable | Description |
+| --- | --- |
+| `APP_BASE_URL` | Public base URL for the running app. |
+| `AUTH_MODE` | Use `easyauth` in Azure Container Apps. Use `disabled` only for local development. |
+| `DEBUG` | Enables temporary DEV troubleshooting endpoints when `true`. Keep unset or `false` in production. |
+| `ADMIN_ALLOWED_EMAILS` | Comma-separated administrator email allowlist. Useful for DEV. |
+| `ADMIN_ALLOWED_GROUP_IDS` | Comma-separated administrator Entra group object ID allowlist. |
+
+Admin access is allowed when `AUTH_MODE=disabled`, or when the authenticated EasyAuth user matches `ADMIN_ALLOWED_EMAILS` or `ADMIN_ALLOWED_GROUP_IDS`. If neither allowlist is configured in `AUTH_MODE=easyauth`, admin access is denied by default.
+
+### Local Development
+
+For local development without Azure EasyAuth, set:
+
+```bash
+AUTH_MODE=disabled
+APP_BASE_URL=http://localhost:8000
+DEBUG=true
+ADMIN_ALLOWED_EMAILS=
+ADMIN_ALLOWED_GROUP_IDS=
+```
+
+Then run the app normally and open `/admin`. The app will show the synthetic local user `Local Developer` (`local-dev@stpride.local`). Do not use `AUTH_MODE=disabled` in Azure or any shared environment.
+
+### DEV EasyAuth Troubleshooting
+
+`GET /debug/easyauth` is available only when `DEBUG=true`. It returns sanitized identity information for troubleshooting EasyAuth header delivery:
+
+- authenticated: `true` or `false`
+- name
+- email
+- user_id
+- groups
+- claim names only
+- auth_mode
+
+It never returns raw headers, tokens, or full claim values. Keep `DEBUG=false` or unset outside DEV; `/debug/easyauth` returns `404` when debug mode is disabled.
+
+### Azure Container Apps Setup
+
+1. Enable Authentication on the Azure Container App.
+2. Add Microsoft Entra ID as the identity provider in the Container Apps Authentication settings.
+3. Configure redirect/callback settings according to Azure Container Apps Authentication requirements. EasyAuth owns the Microsoft Entra sign-in flow and Azure Portal manages the app registration secret.
+4. Set `AUTH_MODE=easyauth` for the app container.
+5. Keep `DEBUG=false` or unset except during temporary DEV troubleshooting.
+6. Configure at least one of `ADMIN_ALLOWED_EMAILS` or `ADMIN_ALLOWED_GROUP_IDS`. Email allowlists are acceptable for DEV; group object IDs are preferred for shared environments.
+7. If using group-based authorization, enable group claims for the identity provider/token configuration. Groups may not always be present in EasyAuth claims; this milestone only evaluates groups when Azure includes them in the EasyAuth principal claims. Microsoft Graph group lookup can be added later.
+
+Example runtime environment configuration:
+
+```bash
+az containerapp update \
+  --name ca-stpride-volunteer-dev \
+  --resource-group rg-stpride-volunteer-dev \
+  --set-env-vars \
+    APP_BASE_URL="https://example.azurecontainerapps.io" \
+    AUTH_MODE=easyauth \
+    DEBUG=false \
+    ADMIN_ALLOWED_EMAILS="admin@example.org" \
+    ADMIN_ALLOWED_GROUP_IDS=""
+```
+
+GitHub Secrets are for CI/CD deployment credentials only. Application runtime authorization settings belong in Azure Container App environment variables or secrets as appropriate.
