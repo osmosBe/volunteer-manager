@@ -4,6 +4,8 @@ ST. PRIDE Volunteer Management is an open-source, lightweight volunteer manageme
 
 No volunteer management business logic, authentication flow, or Microsoft Entra ID integration is implemented yet.
 
+This is repo is still testing and not at all production.!
+
 ## Technology Stack
 
 - Python 3.13
