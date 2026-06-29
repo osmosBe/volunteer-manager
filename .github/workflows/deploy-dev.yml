@@ -12,6 +12,8 @@ permissions:
 
 env:
   IMAGE_NAME: stpride-volunteer-management
+  ACR_NAME: acrstpridevolunteer-fcbqhwazhjgdbhbc
+  ACR_LOGIN_SERVER: acrstpridevolunteer-fcbqhwazhjgdbhbc.azurecr.io
 
 jobs:
   build-and-deploy:
@@ -32,16 +34,14 @@ jobs:
 
       - name: Login to Azure Container Registry
         run: |
-          ACR_NAME="${{ secrets.AZURE_CONTAINER_REGISTRY }}"
-          ACR_NAME="${ACR_NAME%%.azurecr.io}"
-          az acr login --name "$ACR_NAME"
+          az acr login --name "${{ env.ACR_NAME }}"
 
       - name: Build and deploy to Azure Container Apps
         uses: azure/container-apps-deploy-action@v2
         with:
           appSourcePath: ${{ github.workspace }}
           dockerfilePath: Dockerfile
-          registryUrl: ${{ secrets.AZURE_CONTAINER_REGISTRY }}
+          registryUrl: ${{ env.ACR_LOGIN_SERVER }}
           containerAppName: ${{ secrets.AZURE_CONTAINER_APP_NAME }}
           resourceGroup: ${{ secrets.AZURE_RESOURCE_GROUP }}
-          imageToBuild: ${{ secrets.AZURE_CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          imageToBuild: ${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
