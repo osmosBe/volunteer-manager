@@ -12,8 +12,8 @@ permissions:
 
 env:
   IMAGE_NAME: stpride-volunteer-management
-  ACR_NAME: acrstpridevolunteer-fcbqhwazhjgdbhbc
-  ACR_LOGIN_SERVER: acrstpridevolunteer-fcbqhwazhjgdbhbc.azurecr.io
+  ACR_NAME: acrstpridevolunteer
+  ACR_LOGIN_SERVER: acrstpridevolunteer.azurecr.io
 
 jobs:
   build-and-deploy:
