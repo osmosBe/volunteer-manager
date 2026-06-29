@@ -47,3 +47,22 @@ jobs:
           containerAppName: ${{ secrets.AZURE_CONTAINER_APP_NAME }}
           resourceGroup: ${{ secrets.AZURE_RESOURCE_GROUP }}
           imageToBuild: ${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      - name: Health check DEV deployment
+        env:
+          DEV_APP_URL: ${{ secrets.DEV_APP_URL }}
+        run: |
+          if [ -z "$DEV_APP_URL" ]; then
+            echo "DEV_APP_URL environment secret is required." >&2
+            exit 1
+          fi
+
+          base_url="${DEV_APP_URL%/}"
+          status_code=$(curl --silent --show-error --output /dev/null --write-out "%{http_code}" "$base_url/healthz")
+
+          if [ "$status_code" != "200" ]; then
+            echo "DEV health check failed for $base_url/healthz with HTTP $status_code." >&2
+            exit 1
+          fi
+
+          echo "DEV health check passed for $base_url/healthz."
