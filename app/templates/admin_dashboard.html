@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block content %}
+  <h1>ST. PRIDE Volunteer Management – Admin Dashboard</h1>
+  <p>Signed in as {{ admin_user.name or admin_user.email }}</p>
+  <a href="/auth/logout">Sign out</a>
+{% endblock %}
