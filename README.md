@@ -66,6 +66,13 @@ docker compose up --build
 
 The application listens on `http://localhost:8000`. Docker Compose mounts a persistent named volume at `/data`, and the default SQLite database URL points to `/data/app.db`.
 
+
+## Azure Container Apps DEV Deployment
+
+The DEV GitHub Actions deployment keeps the existing Azure Container Apps deployment flow and then checks the deployed app health endpoint. Configure a GitHub environment secret named `DEV_APP_URL` on the `development` environment with the public base URL of the DEV app, for example `https://example-dev.example.azurecontainerapps.io`. The workflow calls `${DEV_APP_URL}/healthz` after deployment and fails unless the endpoint returns HTTP 200.
+
+Azure Container App ingress must target port `8000`, which is the port exposed by the application container. Before enabling SQLite-backed features, configure persistent storage mounted at `/data` so the default SQLite database path `/data/app.db` is durable across container restarts and revisions.
+
 ## Project Structure
 
 ```text
