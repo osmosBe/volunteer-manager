@@ -12,7 +12,7 @@ def parse_csv_env(value: Any, lowercase: bool = False) -> list[str]:
 
     if isinstance(value, str):
         raw_items = value.split(",")
-    elif isinstance(value, (list, tuple, set)):
+    elif isinstance(value, list | tuple | set):
         raw_items = value
     else:
         raw_items = [value]
