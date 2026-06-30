@@ -9,12 +9,8 @@ from app.auth.permissions import has_permission, load_permissions_config
 from app.config.settings import Settings
 
 ROLE_CLAIM_URI = "http://schemas.microsoft.com/ws/2008/06/identity/claims/role"
-GROUPSID_CLAIM_URI = (
-    "http://schemas.microsoft.com/ws/2008/06/identity/claims/groupsid"
-)
-EMAIL_CLAIM_URI = (
-    "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"
-)
+GROUPSID_CLAIM_URI = "http://schemas.microsoft.com/ws/2008/06/identity/claims/groupsid"
+EMAIL_CLAIM_URI = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"
 
 
 def _principal(claims):
@@ -149,9 +145,7 @@ permissions:
 """,
         encoding="utf-8",
     )
-    settings = Settings(
-        auth_mode="easyauth", permissions_config_path=str(config_file)
-    )
+    settings = Settings(auth_mode="easyauth", permissions_config_path=str(config_file))
 
     assert has_permission(
         AuthenticatedUser(roles=["Volunteer.Admin"]), "admin", settings

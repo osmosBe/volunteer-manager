@@ -83,7 +83,7 @@ def _load_permissions_yaml(path: Path) -> dict[str, Any]:
             and stripped.startswith("- ")
         ):
             result["permissions"][current_permission][current_list].append(
-                stripped[2:].strip().strip('"\'')
+                stripped[2:].strip().strip("\"'")
             )
             continue
         raise ValueError("invalid permissions YAML")
