@@ -95,6 +95,39 @@ scripts/        Maintenance and automation scripts
 .github/        GitHub Actions workflows
 ```
 
+
+## Database and Migrations
+
+The application uses SQLite through SQLAlchemy. Runtime configuration comes from `DATABASE_URL` in `Settings`; by default it points at `sqlite:////data/app.db`, so containers should mount persistent storage at `/data`. The application does not create tables on production startup. Apply Alembic migrations before serving traffic.
+
+Run migrations locally:
+
+```bash
+alembic upgrade head
+```
+
+Run migrations against a local override database:
+
+```bash
+DATABASE_URL=sqlite:///./local.db alembic upgrade head
+```
+
+Run migrations in the container before starting or as an operational command:
+
+```bash
+docker compose run --rm app alembic upgrade head
+```
+
+Before deployment, run `alembic upgrade head` as a release/pre-start step against the persistent `/data/app.db` volume, then start the application container. This keeps schema changes explicit and avoids unsafe auto-create behavior in production.
+
+Create the default draft event idempotently after migrations:
+
+```bash
+python -m scripts.seed_default_event
+```
+
+The default seed creates `St. Pölten PRIDE 2026` with slug `pride-2026` only when there are no events.
+
 ## Quality Checks
 
 ```bash
