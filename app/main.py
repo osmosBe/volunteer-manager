@@ -2,12 +2,17 @@ from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import func, inspect, select, text
+from sqlalchemy.orm import Session
 
 from app.auth.permissions import has_permission, permission_names, require_permission
 from app.auth.provider import get_current_user
 from app.config.settings import get_settings
+from app.database.session import database_status, get_db
+from app.models import Event, Shift, Volunteer
 
 admin_dependency = Depends(require_permission("admin"))
+db_dependency = Depends(get_db)
 
 settings = get_settings()
 templates = Jinja2Templates(directory="app/templates")
@@ -46,6 +51,33 @@ def landing_page(request: Request):
 def admin_dashboard(request: Request, admin_user=admin_dependency):
     return templates.TemplateResponse(
         "admin_dashboard.html", {"request": request, "admin_user": admin_user}
+    )
+
+
+@app.get("/admin/db", tags=["admin"])
+def admin_database_status(
+    request: Request,
+    admin_user=admin_dependency,
+    db: Session = db_dependency,
+):
+    inspector = inspect(db.bind)
+    migration_revision = None
+    if inspector.has_table("alembic_version"):
+        migration_revision = db.execute(
+            text("SELECT version_num FROM alembic_version LIMIT 1")
+        ).scalar_one_or_none()
+
+    return templates.TemplateResponse(
+        "admin_db.html",
+        {
+            "request": request,
+            "admin_user": admin_user,
+            "status": database_status(db),
+            "migration_revision": migration_revision,
+            "event_count": db.scalar(select(func.count(Event.id))) or 0,
+            "volunteer_count": db.scalar(select(func.count(Volunteer.id))) or 0,
+            "shift_count": db.scalar(select(func.count(Shift.id))) or 0,
+        },
     )
 
 

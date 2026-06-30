@@ -1,0 +1,120 @@
+import os
+import subprocess
+import sys
+
+from fastapi.testclient import TestClient
+from sqlalchemy import inspect
+from sqlalchemy.orm import sessionmaker
+
+from app.database.base import Base
+from app.database.session import create_database_engine, get_db
+from app.main import app
+from app.models import AgeGroup, Event, EventStatus, Volunteer, VolunteerStatus
+from app.services.seed import ensure_default_event
+from app.services.volunteers import deterministic_email_hash, normalize_email
+
+
+def test_models_can_be_imported():
+    import app.models as models
+
+    assert models.Event.__tablename__ == "events"
+    assert models.Volunteer.__tablename__ == "volunteers"
+
+
+def test_database_session_can_connect_to_temp_sqlite(tmp_path):
+    engine = create_database_engine(f"sqlite:///{tmp_path / 'app.db'}")
+    with engine.connect() as connection:
+        assert connection.exec_driver_sql("SELECT 1").scalar_one() == 1
+        assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() == 1
+
+
+def test_initial_migration_creates_tables(tmp_path):
+    db_path = tmp_path / "migrated.db"
+    env = {**os.environ, "DATABASE_URL": f"sqlite:///{db_path}"}
+    subprocess.run(
+        [sys.executable, "-m", "alembic", "upgrade", "head"],
+        check=True,
+        env=env,
+        cwd=os.getcwd(),
+    )
+
+    engine = create_database_engine(f"sqlite:///{db_path}")
+    table_names = set(inspect(engine).get_table_names())
+    assert {
+        "events",
+        "volunteers",
+        "volunteer_custom_fields",
+        "shifts",
+        "shift_assignments",
+        "blocks",
+        "file_records",
+        "audit_logs",
+        "alembic_version",
+    }.issubset(table_names)
+
+
+def test_default_event_seed_is_idempotent(tmp_path):
+    engine = create_database_engine(f"sqlite:///{tmp_path / 'seed.db'}")
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+
+    with Session() as db:
+        first = ensure_default_event(db)
+        second = ensure_default_event(db)
+        assert first.id == second.id
+        assert db.query(Event).count() == 1
+        assert first.slug == "pride-2026"
+
+
+def test_volunteer_can_be_created_without_birth_date(tmp_path):
+    engine = create_database_engine(f"sqlite:///{tmp_path / 'volunteer.db'}")
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+
+    with Session() as db:
+        event = Event(name="Test Event", slug="test", status=EventStatus.draft)
+        email = "Person@Example.Org"
+        volunteer = Volunteer(
+            event=event,
+            first_name="Test",
+            last_name="Person",
+            email=email,
+            email_normalized=normalize_email(email),
+            email_hash=deterministic_email_hash(email),
+            age_group=AgeGroup.adult,
+            status=VolunteerStatus.submitted,
+        )
+        db.add(volunteer)
+        db.commit()
+
+        assert volunteer.id is not None
+        assert volunteer.birth_date is None
+
+
+def test_age_group_validation_values():
+    assert [item.value for item in AgeGroup] == ["under_16", "age_16_17", "adult"]
+
+
+def test_admin_db_requires_admin_permission(monkeypatch, tmp_path):
+    monkeypatch.setenv("AUTH_MODE", "easyauth")
+    from app.config.settings import get_settings
+
+    get_settings.cache_clear()
+    engine = create_database_engine(f"sqlite:///{tmp_path / 'admin.db'}")
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+
+    def override_get_db():
+        with Session() as db:
+            yield db
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        response = TestClient(app).get("/admin/db")
+    finally:
+        app.dependency_overrides.clear()
+        monkeypatch.setenv("AUTH_MODE", "disabled")
+        get_settings.cache_clear()
+
+    assert response.status_code == 401
+    assert "Sign in required" in response.text

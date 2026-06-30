@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+  <h1>Database Status</h1>
+  <p>Signed in as {{ admin_user.name or admin_user.email }}</p>
+  <table class="table table-sm">
+    <tbody>
+      <tr><th scope="row">Connection</th><td>{{ "connected" if status.connected else "not connected" }}</td></tr>
+      <tr><th scope="row">Migration revision</th><td>{{ migration_revision or "unknown" }}</td></tr>
+      <tr><th scope="row">Events</th><td>{{ event_count }}</td></tr>
+      <tr><th scope="row">Volunteers</th><td>{{ volunteer_count }}</td></tr>
+      <tr><th scope="row">Shifts</th><td>{{ shift_count }}</td></tr>
+    </tbody>
+  </table>
+  <a href="/admin">Back to admin dashboard</a>
+{% endblock %}
