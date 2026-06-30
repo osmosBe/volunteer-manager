@@ -3,11 +3,11 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app.auth.admin import require_admin
+from app.auth.permissions import has_permission, permission_names, require_permission
 from app.auth.provider import get_current_user
 from app.config.settings import get_settings
 
-admin_dependency = Depends(require_admin)
+admin_dependency = Depends(require_permission("admin"))
 
 settings = get_settings()
 templates = Jinja2Templates(directory="app/templates")
@@ -62,9 +62,14 @@ def debug_easyauth(request: Request):
             "name": user.name if user else None,
             "email": user.email if user else None,
             "user_id": user.user_id if user else None,
+            "roles": user.roles if user else [],
             "groups": user.groups if user else [],
             "claims": user.claims if user else [],
             "auth_mode": settings.auth_mode,
+            "permissions_summary": {
+                name: has_permission(user, name, settings)
+                for name in permission_names(settings)
+            },
         }
     )
 

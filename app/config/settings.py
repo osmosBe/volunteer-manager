@@ -47,6 +47,7 @@ class Settings(BaseSettings):
     app_base_url: str = "http://localhost:8000"
     auth_mode: AuthMode = "disabled"
     debug: bool = False
+    permissions_config_path: str = "config/permissions.yaml"
     admin_allowed_emails: EmailCsvList = Field(default_factory=list)
     admin_allowed_group_ids: CsvList = Field(default_factory=list)
 

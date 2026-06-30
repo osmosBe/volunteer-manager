@@ -182,3 +182,49 @@ az containerapp update \
 ```
 
 GitHub Secrets are for CI/CD deployment credentials only. Application runtime authorization settings belong in Azure Container App environment variables or secrets as appropriate.
+
+
+## Milestone 2 Authentication and Authorization
+
+Authentication is handled by Azure Container Apps built-in Authentication / Authorization (EasyAuth) with Microsoft Entra ID. Azure authenticates users before requests reach FastAPI; the app trusts EasyAuth headers only when `AUTH_MODE=easyauth` is enabled in that protected Azure runtime. The FastAPI application then performs application-level authorization.
+
+Public routes remain public: `GET /healthz` and `GET /`. The admin dashboard at `GET /admin` requires the `admin` permission through the shared permissions system.
+
+### Authorization model
+
+The preferred long-term authorization model is Microsoft Entra App Roles. The supported fallback/alternative is Microsoft Entra group claims using stable Entra Group Object IDs. Email allowlists are retained only as a deprecated DEV/emergency fallback for the `admin` permission.
+
+The central mapping lives in `config/permissions.yaml`. For now, changes require updating the file and redeploying/restarting the application. A future milestone may make this editable through the GUI.
+
+### App Role setup
+
+In Microsoft Entra admin center, open the App Registration and choose **App roles → Create app role**.
+
+Example administrator role:
+
+- Display name: Volunteer Administrator
+- Allowed member types: Users/Groups
+- Value: `Volunteer.Admin`
+- Description: Can fully administer the ST. PRIDE Volunteer Management application.
+- Enabled: true
+
+Assign users or groups through **Enterprise Applications → volunteer-app-admin-login → Users and groups → Add user/group → select role**.
+
+Direct user assignment works. Group assignment may require Microsoft Entra ID P1 depending on the tenant plan. If using group claims instead of app roles, configure **Token configuration → Add groups claim → Group ID**. Do not use sAMAccountName for cloud authorization. Do not enable **Emit groups as role claims** unless intentionally mixing role and group concepts.
+
+### Local development and debugging
+
+Use `AUTH_MODE=disabled` for local development. The local developer has all permissions in this mode.
+
+Set `DEBUG=true` only in DEV to enable `GET /debug/easyauth`. The endpoint returns sanitized identity and permission information only: authentication status, name, email, user ID, roles, groups, claim names, auth mode, and per-permission booleans. It does not expose raw headers, generic claim values, tokens, or secrets. Keep `DEBUG=false` or unset in production.
+
+### Relevant settings
+
+All application configuration is loaded through the central Settings class; do not call `os.getenv` elsewhere in application code.
+
+- `APP_BASE_URL`
+- `AUTH_MODE`
+- `DEBUG`
+- `PERMISSIONS_CONFIG_PATH`
+- `ADMIN_ALLOWED_EMAILS` (deprecated DEV/emergency fallback for `admin`)
+- `ADMIN_ALLOWED_GROUP_IDS` (deprecated DEV/emergency fallback for `admin`)

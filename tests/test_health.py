@@ -90,6 +90,7 @@ def test_easyauth_principal_parser_handles_valid_client_principal() -> None:
         user_id="user-123",
         name="Admin User",
         email="admin@example.org",
+        roles=[],
         groups=["group-123"],
         claims=["name", "preferred_username", "oid", "groups"],
     )
@@ -113,6 +114,7 @@ def test_easyauth_principal_parser_uses_fallback_headers() -> None:
         user_id="fallback-user-id",
         name="fallback@example.org",
         email="fallback@example.org",
+        roles=[],
         groups=[],
         claims=[],
     )
@@ -173,10 +175,17 @@ def test_debug_easyauth_returns_sanitized_data_when_debug_true(monkeypatch) -> N
         "authenticated": True,
         "name": "Admin User",
         "email": "secret-admin@example.org",
-        "user_id": None,
+        "user_id": "",
+        "roles": [],
         "groups": [],
         "claims": ["name", "preferred_username", "access_token"],
         "auth_mode": "easyauth",
+        "permissions_summary": {
+            "admin": False,
+            "checkin": False,
+            "manager": False,
+            "police": False,
+        },
     }
     assert "super-secret-token" not in response.text
     assert header not in response.text
