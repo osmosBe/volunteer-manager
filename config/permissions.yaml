@@ -1,0 +1,24 @@
+permissions:
+  admin:
+    roles:
+      - Volunteer.Admin
+    groups: []
+    emails: []
+
+  manager:
+    roles:
+      - Volunteer.Manager
+    groups: []
+    emails: []
+
+  checkin:
+    roles:
+      - Volunteer.CheckIn
+    groups: []
+    emails: []
+
+  police:
+    roles:
+      - Volunteer.Police
+    groups: []
+    emails: []
