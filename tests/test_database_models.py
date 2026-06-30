@@ -1,17 +1,30 @@
+import importlib
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 from sqlalchemy import inspect
 from sqlalchemy.orm import sessionmaker
 
+from app.config.settings import get_settings
 from app.database.base import Base
-from app.database.session import create_database_engine, get_db
-from app.main import app
+from app.database.session import (
+    create_database_engine,
+    get_db,
+    get_engine,
+    reset_database_engine,
+)
 from app.models import AgeGroup, Event, EventStatus, Volunteer, VolunteerStatus
 from app.services.seed import ensure_default_event
 from app.services.volunteers import deterministic_email_hash, normalize_email
+
+
+def _use_database_url(monkeypatch, database_url: str) -> None:
+    monkeypatch.setenv("DATABASE_URL", database_url)
+    get_settings.cache_clear()
+    reset_database_engine()
 
 
 def test_models_can_be_imported():
@@ -19,6 +32,39 @@ def test_models_can_be_imported():
 
     assert models.Event.__tablename__ == "events"
     assert models.Volunteer.__tablename__ == "volunteers"
+
+
+def test_importing_app_main_does_not_create_data_directory(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "sqlite:////data/app.db")
+    get_settings.cache_clear()
+    reset_database_engine()
+
+    original_mkdir = Path.mkdir
+
+    def fail_for_data_path(self, *args, **kwargs):
+        if str(self) in {"/data", "//data"}:
+            raise AssertionError("import should not create /data")
+        return original_mkdir(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "mkdir", fail_for_data_path)
+
+    import app.main as main_module
+
+    importlib.reload(main_module)
+
+    reset_database_engine()
+
+
+def test_database_url_can_be_overridden_before_lazy_engine_creation(
+    monkeypatch, tmp_path
+):
+    db_path = tmp_path / "override.db"
+    _use_database_url(monkeypatch, f"sqlite:///{db_path}")
+
+    engine = get_engine()
+
+    assert str(engine.url) == f"sqlite:///{db_path}"
+    assert db_path.parent.exists()
 
 
 def test_database_session_can_connect_to_temp_sqlite(tmp_path):
@@ -97,8 +143,6 @@ def test_age_group_validation_values():
 
 def test_admin_db_requires_admin_permission(monkeypatch, tmp_path):
     monkeypatch.setenv("AUTH_MODE", "easyauth")
-    from app.config.settings import get_settings
-
     get_settings.cache_clear()
     engine = create_database_engine(f"sqlite:///{tmp_path / 'admin.db'}")
     Base.metadata.create_all(engine)
@@ -107,6 +151,8 @@ def test_admin_db_requires_admin_permission(monkeypatch, tmp_path):
     def override_get_db():
         with Session() as db:
             yield db
+
+    from app.main import app
 
     app.dependency_overrides[get_db] = override_get_db
     try:
