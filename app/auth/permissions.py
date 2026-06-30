@@ -100,7 +100,9 @@ def load_permissions_config(path: str | Path) -> PermissionsConfig | None:
         return None
 
 
-def get_permissions_config(settings: Settings | None = None) -> PermissionsConfig | None:
+def get_permissions_config(
+    settings: Settings | None = None,
+) -> PermissionsConfig | None:
     settings = settings or get_settings()
     return load_permissions_config(settings.permissions_config_path)
 
