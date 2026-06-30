@@ -111,8 +111,8 @@ class Event(TimestampMixin, Base):
     slug: Mapped[str] = mapped_column(
         String(120), nullable=False, unique=True, index=True
     )
-    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[EventStatus] = mapped_column(
         SAEnum(EventStatus, native_enum=False),
         default=EventStatus.draft,
@@ -137,15 +137,15 @@ class Volunteer(TimestampMixin, Base):
         String(255), nullable=False, index=True
     )
     email_hash: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
-    phone: Mapped[str] = mapped_column(String(50))
+    phone: Mapped[str] = mapped_column(String(50), nullable=True)
     age_group: Mapped[AgeGroup] = mapped_column(
         SAEnum(AgeGroup, native_enum=False), nullable=False
     )
-    birth_date: Mapped[date] = mapped_column(Date)
+    birth_date: Mapped[date] = mapped_column(Date, nullable=True)
     birth_date_verified: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False
     )
-    food_choice: Mapped[str] = mapped_column(String(100))
+    food_choice: Mapped[str] = mapped_column(String(100), nullable=True)
     status: Mapped[VolunteerStatus] = mapped_column(
         SAEnum(VolunteerStatus, native_enum=False),
         default=VolunteerStatus.submitted,
@@ -174,7 +174,7 @@ class VolunteerCustomField(TimestampMixin, Base):
     )
     field_id: Mapped[str] = mapped_column(String(120), nullable=False)
     value_json: Mapped[str] = mapped_column(Text, nullable=False)
-    retention_category: Mapped[str] = mapped_column(String(100))
+    retention_category: Mapped[str] = mapped_column(String(100), nullable=True)
 
     volunteer: Mapped[Volunteer] = relationship(back_populates="custom_fields")
 
@@ -187,8 +187,8 @@ class Shift(TimestampMixin, Base):
         ForeignKey("events.id", ondelete="CASCADE"), nullable=False, index=True
     )
     title: Mapped[str] = mapped_column(String(200), nullable=False)
-    description: Mapped[str] = mapped_column(Text)
-    location: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str] = mapped_column(Text, nullable=True)
+    location: Mapped[str] = mapped_column(String(200), nullable=True)
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     needed_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
@@ -241,10 +241,10 @@ class Block(Base):
     __tablename__ = "blocks"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    first_name: Mapped[str] = mapped_column(String(100))
-    last_name: Mapped[str] = mapped_column(String(100))
-    birth_date: Mapped[date] = mapped_column(Date)
-    email_hash: Mapped[str] = mapped_column(String(128), index=True)
+    first_name: Mapped[str] = mapped_column(String(100), nullable=True)
+    last_name: Mapped[str] = mapped_column(String(100), nullable=True)
+    birth_date: Mapped[date] = mapped_column(Date, nullable=True)
+    email_hash: Mapped[str] = mapped_column(String(128), index=True, nullable=True)
     block_category: Mapped[BlockCategory] = mapped_column(
         SAEnum(BlockCategory, native_enum=False), nullable=False
     )
@@ -253,12 +253,12 @@ class Block(Base):
         default=BlockStatus.active,
         nullable=False,
     )
-    created_by: Mapped[str] = mapped_column(String(255))
+    created_by: Mapped[str] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
     )
-    review_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    review_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class FileRecord(Base):
@@ -272,13 +272,13 @@ class FileRecord(Base):
         SAEnum(FileType, native_enum=False), nullable=False
     )
     storage_path: Mapped[str] = mapped_column(String(500), nullable=False)
-    original_filename: Mapped[str] = mapped_column(String(255))
-    mime_type: Mapped[str] = mapped_column(String(120))
-    size_bytes: Mapped[int] = mapped_column(Integer)
+    original_filename: Mapped[str] = mapped_column(String(255), nullable=True)
+    mime_type: Mapped[str] = mapped_column(String(120), nullable=True)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=True)
     uploaded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
     )
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
 
     volunteer: Mapped[Volunteer] = relationship(back_populates="files")
 
@@ -287,13 +287,13 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    actor_user_id: Mapped[str] = mapped_column(String(255))
-    actor_email: Mapped[str] = mapped_column(String(255))
-    actor_name: Mapped[str] = mapped_column(String(255))
+    actor_user_id: Mapped[str] = mapped_column(String(255), nullable=True)
+    actor_email: Mapped[str] = mapped_column(String(255), nullable=True)
+    actor_name: Mapped[str] = mapped_column(String(255), nullable=True)
     action: Mapped[str] = mapped_column(String(120), nullable=False)
     entity_type: Mapped[str] = mapped_column(String(120), nullable=False)
-    entity_id: Mapped[str] = mapped_column(String(120))
-    metadata_json: Mapped[str] = mapped_column(Text)
+    entity_id: Mapped[str] = mapped_column(String(120), nullable=True)
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
     )
