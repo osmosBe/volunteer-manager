@@ -188,9 +188,11 @@ The DEV GitHub Actions deployment keeps the existing Azure Container Apps deploy
 
 If a new Container Apps revision does not become healthy, the workflow keeps the
 previous healthy revision serving traffic and records the newest revision's
-provisioning/health state plus bounded system and console logs in the failed job.
-The diagnostic output contains no application secrets and makes revision startup
-failures visible without weakening the public health checks.
+provisioning/health state, ingress traffic and bounded system/console logs in the
+failed job. Filtered error and startup lines are also attached to the check-run
+annotations so the failure remains diagnosable when raw Actions logs are not
+available. The diagnostic output contains no application secrets and makes
+revision startup failures visible without weakening the public health checks.
 
 Azure Container App ingress must target port `8000`, which is the port exposed by the application container. Before enabling SQLite-backed features, configure persistent storage mounted at `/data` so the default SQLite database path `/data/app.db` is durable across container restarts and revisions.
 

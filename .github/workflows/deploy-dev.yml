@@ -93,6 +93,20 @@ jobs:
           CONTAINER_APP_NAME: ${{ secrets.AZURE_CONTAINER_APP_NAME }}
           RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
         run: |
+          emit_filtered_annotation() {
+            title="$1"
+            filtered=$(grep -Eai \
+              'error|fail|exception|traceback|alembic|sqlalchemy|sqlite|permission|denied|locked|no such|uvicorn|server process|application startup|listening' \
+              | tail -n 80 || true)
+            if [ -z "$filtered" ]; then
+              filtered="No matching error or startup lines were returned."
+            fi
+            filtered=${filtered//'%'/'%25'}
+            filtered=${filtered//$'\r'/'%0D'}
+            filtered=${filtered//$'\n'/'%0A'}
+            echo "::error title=$title::$filtered"
+          }
+
           latest_revision=$(az containerapp revision list \
             --name "$CONTAINER_APP_NAME" \
             --resource-group "$RESOURCE_GROUP" \
@@ -112,16 +126,27 @@ jobs:
             --output json | tr '\n' ' ')
           echo "::error title=DEV revision diagnostics::$revision_state"
 
-          az containerapp logs show \
+          app_state=$(az containerapp show \
+            --name "$CONTAINER_APP_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --query "{revisionMode:properties.configuration.activeRevisionsMode,targetPort:properties.configuration.ingress.targetPort,traffic:properties.configuration.ingress.traffic}" \
+            --output json | tr '\n' ' ')
+          echo "::error title=DEV ingress diagnostics::$app_state"
+
+          system_logs=$(az containerapp logs show \
             --name "$CONTAINER_APP_NAME" \
             --resource-group "$RESOURCE_GROUP" \
             --revision "$latest_revision" \
             --type system \
-            --tail 100 || true
+            --tail 100 2>&1 || true)
+          printf '%s\n' "$system_logs"
+          printf '%s\n' "$system_logs" | emit_filtered_annotation "DEV system log diagnostics"
 
-          az containerapp logs show \
+          console_logs=$(az containerapp logs show \
             --name "$CONTAINER_APP_NAME" \
             --resource-group "$RESOURCE_GROUP" \
             --revision "$latest_revision" \
             --type console \
-            --tail 150 || true
+            --tail 150 2>&1 || true)
+          printf '%s\n' "$console_logs"
+          printf '%s\n' "$console_logs" | emit_filtered_annotation "DEV console log diagnostics"
