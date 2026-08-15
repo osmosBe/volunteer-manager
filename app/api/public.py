@@ -17,6 +17,7 @@ from app.services.registrations import (
     cancel_assignment,
     create_registration,
     get_volunteer_by_edit_token,
+    update_registration,
 )
 
 router = APIRouter(tags=["public"])
@@ -129,6 +130,85 @@ def registration_confirmation(token: str, request: Request, db: DatabaseSession)
         "registration_confirmation.html",
         {"volunteer": volunteer, "token": token},
     )
+
+
+@router.get("/anmeldung/{token}/bearbeiten")
+def edit_registration(token: str, request: Request, db: DatabaseSession):
+    volunteer = get_volunteer_by_edit_token(db, token)
+    if volunteer is None:
+        raise HTTPException(status_code=404, detail="Bearbeitungslink ungültig.")
+    event = get_public_event(db, volunteer.event.slug)
+    shifts = [shift for shift in event.shifts if shift.status == ShiftStatus.open]
+    selected_shift_ids = {
+        assignment.shift_id
+        for assignment in volunteer.assignments
+        if assignment.assignment_status.value != "cancelled"
+    }
+    return templates.TemplateResponse(
+        request,
+        "registration_edit.html",
+        {
+            "event": event,
+            "volunteer": volunteer,
+            "token": token,
+            "shifts": shifts,
+            "selected_shift_ids": selected_shift_ids,
+            "error": None,
+        },
+    )
+
+
+@router.post("/anmeldung/{token}/bearbeiten")
+def submit_registration_edit(
+    token: str,
+    request: Request,
+    db: DatabaseSession,
+    first_name: Annotated[str, Form()],
+    last_name: Annotated[str, Form()],
+    email: Annotated[str, Form()],
+    contact_consent: Annotated[bool, Form()] = False,
+    shift_ids: Annotated[list[int] | None, Form()] = None,
+    phone: Annotated[str | None, Form()] = None,
+    pronouns: Annotated[str | None, Form()] = None,
+    birth_date: Annotated[date | None, Form()] = None,
+    future_contact_consent: Annotated[bool, Form()] = False,
+):
+    volunteer = get_volunteer_by_edit_token(db, token)
+    if volunteer is None:
+        raise HTTPException(status_code=404, detail="Bearbeitungslink ungültig.")
+    event = get_public_event(db, volunteer.event.slug)
+    try:
+        update_registration(
+            db,
+            volunteer,
+            RegistrationData(
+                first_name=first_name,
+                last_name=last_name,
+                email=email,
+                phone=phone,
+                pronouns=pronouns,
+                birth_date=birth_date,
+                contact_consent=contact_consent,
+                future_contact_consent=future_contact_consent,
+            ),
+            shift_ids or [],
+        )
+    except RegistrationError as exc:
+        shifts = [shift for shift in event.shifts if shift.status == ShiftStatus.open]
+        return templates.TemplateResponse(
+            request,
+            "registration_edit.html",
+            {
+                "event": event,
+                "volunteer": volunteer,
+                "token": token,
+                "shifts": shifts,
+                "selected_shift_ids": set(shift_ids or []),
+                "error": str(exc),
+            },
+            status_code=422,
+        )
+    return RedirectResponse(url=f"/anmeldung/{token}/bestaetigung", status_code=303)
 
 
 @router.post("/anmeldung/{token}/zuteilungen/{assignment_id}/stornieren")
