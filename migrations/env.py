@@ -1,7 +1,7 @@
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import engine_from_config, event, pool
 
 import app.models  # noqa: F401
 from app.config.settings import get_settings
@@ -30,11 +30,22 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
+    database_url = config.get_main_option("sqlalchemy.url")
+    connect_args = {"timeout": 30} if database_url.startswith("sqlite") else {}
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args=connect_args,
     )
+
+    if database_url.startswith("sqlite"):
+
+        @event.listens_for(connectable, "connect")
+        def _set_sqlite_busy_timeout(
+            dbapi_connection, connection_record
+        ):  # noqa: ANN001, ARG001
+            dbapi_connection.execute("PRAGMA busy_timeout=30000")
 
     with connectable.connect() as connection:
         context.configure(connection=connection, target_metadata=target_metadata)

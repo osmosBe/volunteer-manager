@@ -1,8 +1,26 @@
 #!/bin/sh
 set -eu
 
-# One replica uses the persistent /data volume. Upgrade before serving traffic
-# so this revision never queries an older SQLite schema. Alembic is idempotent.
-alembic upgrade head
+# During a revision change, Azure can briefly overlap an old and a new replica.
+# SQLite permits only one schema writer, so retry only its transient lock error.
+# All other migration errors fail the revision immediately and remain visible.
+attempt=1
+max_attempts=12
+while :; do
+    if migration_output="$(alembic upgrade head 2>&1)"; then
+        printf '%s\n' "$migration_output"
+        break
+    fi
+
+    printf '%s\n' "$migration_output" >&2
+    if ! printf '%s' "$migration_output" | grep -q "database is locked" \
+        || [ "$attempt" -ge "$max_attempts" ]; then
+        exit 1
+    fi
+
+    printf 'SQLite migration is locked; retrying (%s/%s).\n' "$attempt" "$max_attempts" >&2
+    sleep 5
+    attempt=$((attempt + 1))
+done
 
 exec uvicorn app.main:app --host 0.0.0.0 --port 8000
