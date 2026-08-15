@@ -13,7 +13,10 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata
-config.set_main_option("sqlalchemy.url", get_settings().database_url)
+# ConfigParser treats percent signs as interpolation markers. PostgreSQL URLs
+# commonly contain percent-encoded password characters, so escape only for the
+# Alembic configuration layer; ``get_main_option`` restores the original URL.
+config.set_main_option("sqlalchemy.url", get_settings().database_url.replace("%", "%%"))
 
 
 def run_migrations_offline() -> None:

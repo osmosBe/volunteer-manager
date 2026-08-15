@@ -44,8 +44,8 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql+psycopg://volunteer:local-ci-password@localhost:5432/volunteer
-      POSTGRES_TEST_URL: postgresql+psycopg://volunteer:local-ci-password@localhost:5432/volunteer
+      DATABASE_URL: postgresql+psycopg://volunteer:local%2Dci%2Dpassword@localhost:5432/volunteer
+      POSTGRES_TEST_URL: postgresql+psycopg://volunteer:local%2Dci%2Dpassword@localhost:5432/volunteer
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
