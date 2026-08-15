@@ -16,7 +16,9 @@ target-version = "py313"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
-ignore = []
+# ``timezone.utc`` keeps the application executable on the local Python 3.10
+# toolchain as well as the supported Python 3.13 runtime.
+ignore = ["UP017"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

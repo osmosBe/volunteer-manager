@@ -16,7 +16,18 @@ from app.database.session import (
     get_engine,
     reset_database_engine,
 )
-from app.models import AgeGroup, Event, EventStatus, Volunteer, VolunteerStatus
+from app.models import (
+    AgeGroup,
+    AssignmentSource,
+    AssignmentStatus,
+    CheckIn,
+    Event,
+    EventStatus,
+    ShiftStatus,
+    Team,
+    Volunteer,
+    VolunteerStatus,
+)
 from app.services.seed import ensure_default_event
 from app.services.volunteers import deterministic_email_hash, normalize_email
 
@@ -95,6 +106,12 @@ def test_initial_migration_creates_tables(tmp_path):
         "blocks",
         "file_records",
         "audit_logs",
+        "teams",
+        "roles",
+        "checkins",
+        "briefings",
+        "briefing_confirmations",
+        "outbox_messages",
         "alembic_version",
     }.issubset(table_names)
 
@@ -139,6 +156,24 @@ def test_volunteer_can_be_created_without_birth_date(tmp_path):
 
 def test_age_group_validation_values():
     assert [item.value for item in AgeGroup] == ["under_16", "age_16_17", "adult"]
+
+
+def test_extended_workflow_model_defaults(tmp_path):
+    engine = create_database_engine(f"sqlite:///{tmp_path / 'workflow.db'}")
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+
+    with Session() as db:
+        event = Event(name="Test", slug="workflow", status=EventStatus.draft)
+        team = Team(event=event, name="Aufbau")
+        db.add_all([event, team])
+        db.commit()
+
+        assert team.id is not None
+        assert ShiftStatus.open.value == "open"
+        assert AssignmentStatus.waitlisted.value == "waitlisted"
+        assert AssignmentSource.public.value == "public"
+        assert CheckIn.__tablename__ == "checkins"
 
 
 def test_admin_db_requires_admin_permission(monkeypatch, tmp_path):
