@@ -64,7 +64,7 @@ def health_ready(db: Session = db_dependency):
 
 @app.get("/admin", tags=["admin"])
 def admin_dashboard(
-    request: Request, db: Session = db_dependency, admin_user=admin_dependency
+    request: Request, admin_user=admin_dependency, db: Session = db_dependency
 ):
     try:
         events = list(
@@ -95,8 +95,8 @@ def new_event_form(request: Request, admin_user=admin_dependency):
 @app.post("/admin/veranstaltungen/neu", tags=["admin"])
 def create_event(
     request: Request,
-    db: Session = db_dependency,
     admin_user=admin_dependency,
+    db: Session = db_dependency,
     name: Annotated[str, Form()] = "",
     slug: Annotated[str, Form()] = "",
     starts_at: Annotated[datetime | None, Form()] = None,

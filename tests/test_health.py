@@ -69,11 +69,22 @@ def test_admin_denies_access_in_easyauth_mode_without_headers(monkeypatch) -> No
     assert "Sign in required" in response.text
 
 
-def test_admin_allows_access_when_auth_mode_disabled(monkeypatch) -> None:
+def test_admin_allows_access_when_auth_mode_disabled(monkeypatch, tmp_path) -> None:
     _set_auth_env(monkeypatch, "disabled")
-    client = TestClient(app)
+    engine = create_database_engine(f"sqlite:///{tmp_path / 'admin.db'}")
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
 
-    response = client.get("/admin")
+    def override_get_db():
+        with Session() as db:
+            yield db
+
+    app.dependency_overrides[get_db] = override_get_db
+    client = TestClient(app)
+    try:
+        response = client.get("/admin")
+    finally:
+        app.dependency_overrides.clear()
 
     assert response.status_code == 200
     assert "ST. PRIDE Volunteer Management – Admin Dashboard" in response.text
