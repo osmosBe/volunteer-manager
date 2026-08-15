@@ -157,7 +157,24 @@ if ([string]::IsNullOrWhiteSpace($ContainerAppEnvironmentName)) {
     $ContainerAppEnvironmentName = Split-Path -Leaf $containerApp.properties.managedEnvironmentId
 }
 
-$job = Get-AzJson containerapp job show --name $MigrationJobName --resource-group $DevResourceGroup
+$job = $null
+try {
+    $job = Get-AzJson containerapp job show --name $MigrationJobName --resource-group $DevResourceGroup
+} catch {
+    $provisionCommand = @"
+az deployment group create --resource-group $DevResourceGroup --template-file infra/main.bicep --parameters postgresqlAdministratorPassword='<STRONG-PASSWORD>' existingContainerAppName='$ContainerAppName' existingContainerAppEnvironmentName='$ContainerAppEnvironmentName' existingContainerRegistryName='$ContainerRegistryName'
+"@.Trim()
+    throw @"
+Azure Container Apps migration job '$MigrationJobName' was not found in Resource Group '$DevResourceGroup'.
+
+The bootstrap script intentionally does not create infrastructure resources: provision PostgreSQL and the migration job first with the Deploy to Azure template or Bicep. This avoids guessing an image, registry credentials, or a DATABASE_URL for an existing deployment.
+
+From the repository root, provision the missing infrastructure while preserving the existing Container App, Container Apps environment, and registry:
+$provisionCommand
+
+After the deployment succeeds, rerun bootstrap.ps1. Do not enter a PostgreSQL URL until the template has completed.
+"@
+}
 $appDatabaseReference = @(
     $containerApp.properties.template.containers[0].env | Where-Object { $_.name -eq "DATABASE_URL" -and $_.secretRef }
 )
