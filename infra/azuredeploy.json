@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.45.15.27210",
-      "templateHash": "1843765744902124822"
+      "templateHash": "3348552717732967982"
     }
   },
   "parameters": {
@@ -921,7 +921,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.45.15.27210",
-              "templateHash": "12335436738532963528"
+              "templateHash": "12995207105709766429"
             }
           },
           "parameters": {
@@ -1025,16 +1025,16 @@
                       "name": "alembic",
                       "image": "[parameters('image')]",
                       "command": [
-                        "/bin/sh"
-                      ],
-                      "args": [
-                        "-c",
-                        "alembic upgrade head && alembic current"
+                        "./scripts/deploy_database.py"
                       ],
                       "env": [
                         {
                           "name": "DATABASE_URL",
                           "secretRef": "database-url"
+                        },
+                        {
+                          "name": "SEED_DEMO_DATA",
+                          "value": "false"
                         }
                       ],
                       "resources": {

@@ -233,18 +233,17 @@ production environments should use `AUTH_MODE=easyauth`.
 2. Confirm the Container App and migration job both reference the same
    `database-url` secret.
 3. Optionally set GitHub Environment variable `SEED_DEMO_DATA=true` for a
-   disposable DEV database only. The deployment runs the idempotent seed as a
-   separate Container Apps Job after Alembic; the web container never seeds on
-   startup.
+   disposable DEV database only. The controlled database deployment job runs
+   Alembic first and then the idempotent seed in the same execution; the web
+   container never migrates or seeds on startup.
 4. Push or merge the completed change to `dev`.
 5. CI runs Black, Ruff, pytest, SQLite migration checks, a disposable PostgreSQL
    16 migration test, Bicep compilation and PowerShell parse validation.
 6. The `dev` push workflow calls the reusable DEV deployment only after its
    test, PostgreSQL migration and infrastructure jobs all succeed. It then
    builds/pushes the exact tested commit image, deploys the revision, runs the
-   same image as the Alembic job, waits for job success, optionally runs the
-   demo seed as a separate job, and verifies the exact commit SHA, liveness and
-   DB readiness.
+   same image as the database deployment job, waits for Alembic and the optional
+   seed to succeed, and verifies the exact commit SHA, liveness and DB readiness.
 
 Migration failure fails the GitHub deployment. It does not silently start a web
 container that mutates its own schema.

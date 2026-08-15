@@ -53,15 +53,13 @@ jobs:
           python-version: "3.13"
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
-      - name: Upgrade fresh PostgreSQL schema twice
+      - name: Run deployment database entrypoint twice
+        env:
+          SEED_DEMO_DATA: "true"
         run: |
-          alembic upgrade head
-          alembic upgrade head
+          ./scripts/deploy_database.py
+          ./scripts/deploy_database.py
           alembic current
-      - name: Verify fictional seed is repeatable on PostgreSQL
-        run: |
-          python -m scripts.seed_default_event
-          python -m scripts.seed_default_event
       - name: Verify PostgreSQL model semantics
         run: pytest tests/test_postgres_migrations.py
 
