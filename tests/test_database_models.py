@@ -257,13 +257,19 @@ def test_demo_seed_is_idempotent_and_uses_fictional_contacts(tmp_path):
         )
 
 
-def test_dev_workflow_passes_seed_module_as_separate_azure_cli_arguments():
+def test_deployment_uses_fixed_database_job_entrypoint():
     workflow = (
         Path(__file__).parents[1] / ".github/workflows/deploy-dev.yml"
     ).read_text(encoding="utf-8")
+    migration_job = (
+        Path(__file__).parents[1] / "infra/modules/migration-job.bicep"
+    ).read_text(encoding="utf-8")
 
-    assert '--args "-m" "scripts.seed_default_event"' in workflow
-    assert "--args=-m scripts.seed_default_event" not in workflow
+    assert "--command ./scripts/deploy_database.py" in workflow
+    assert "--args" not in workflow
+    assert '--set-env-vars "SEED_DEMO_DATA=$seed_demo_data"' in workflow
+    assert "scripts/deploy_database.py" in migration_job
+    assert "scripts.seed_default_event" not in workflow
 
 
 def test_volunteer_can_be_created_without_birth_date(tmp_path):

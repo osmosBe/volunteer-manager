@@ -1025,16 +1025,16 @@
                       "name": "alembic",
                       "image": "[parameters('image')]",
                       "command": [
-                        "/bin/sh"
-                      ],
-                      "args": [
-                        "-c",
-                        "alembic upgrade head && alembic current"
+                        "./scripts/deploy_database.py"
                       ],
                       "env": [
                         {
                           "name": "DATABASE_URL",
                           "secretRef": "database-url"
+                        },
+                        {
+                          "name": "SEED_DEMO_DATA",
+                          "value": "false"
                         }
                       ],
                       "resources": {

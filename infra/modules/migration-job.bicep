@@ -68,16 +68,16 @@ resource job 'Microsoft.App/jobs@2024-03-01' = {
           name: 'alembic'
           image: image
           command: [
-            '/bin/sh'
-          ]
-          args: [
-            '-c'
-            'alembic upgrade head && alembic current'
+            './scripts/deploy_database.py'
           ]
           env: [
             {
               name: 'DATABASE_URL'
               secretRef: 'database-url'
+            }
+            {
+              name: 'SEED_DEMO_DATA'
+              value: 'false'
             }
           ]
           resources: {
