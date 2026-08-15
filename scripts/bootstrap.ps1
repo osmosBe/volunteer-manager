@@ -153,6 +153,9 @@ $MigrationJobName = Resolve-RequiredValue $MigrationJobName "Azure Container App
 
 $containerApp = Get-AzJson containerapp show --name $ContainerAppName --resource-group $DevResourceGroup
 $appBaseUrl = "https://$($containerApp.properties.configuration.ingress.fqdn)"
+if ([string]::IsNullOrWhiteSpace($ContainerAppEnvironmentName)) {
+    $ContainerAppEnvironmentName = Split-Path -Leaf $containerApp.properties.managedEnvironmentId
+}
 
 $job = Get-AzJson containerapp job show --name $MigrationJobName --resource-group $DevResourceGroup
 $appDatabaseReference = @(
@@ -256,7 +259,7 @@ if ($matchingCredential.Count -eq 0) {
     Write-Host "Existing matching federated credential was preserved."
 }
 
-$roleAssignments = @(Get-AzJson role assignment list --assignee $ApplicationClientId --scope $resourceGroupId)
+$roleAssignments = @(Get-AzJson role assignment list --assignee $servicePrincipal.id --scope $resourceGroupId)
 $hasContributor = @($roleAssignments | Where-Object { $_.roleDefinitionName -eq "Contributor" }).Count -gt 0
 $manualRbacRequired = $false
 if (-not $hasContributor) {
