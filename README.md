@@ -233,7 +233,9 @@ production environments should use `AUTH_MODE=easyauth`.
 2. Confirm the Container App and migration job both reference the same
    `database-url` secret.
 3. Optionally set GitHub Environment variable `SEED_DEMO_DATA=true` for a
-   disposable DEV database only.
+   disposable DEV database only. The deployment runs the idempotent seed as a
+   separate Container Apps Job after Alembic; the web container never seeds on
+   startup.
 4. Push or merge the completed change to `dev`.
 5. CI runs Black, Ruff, pytest, SQLite migration checks, a disposable PostgreSQL
    16 migration test, Bicep compilation and PowerShell parse validation.

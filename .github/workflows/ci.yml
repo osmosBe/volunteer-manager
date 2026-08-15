@@ -58,6 +58,10 @@ jobs:
           alembic upgrade head
           alembic upgrade head
           alembic current
+      - name: Verify fictional seed is repeatable on PostgreSQL
+        run: |
+          python -m scripts.seed_default_event
+          python -m scripts.seed_default_event
       - name: Verify PostgreSQL model semantics
         run: pytest tests/test_postgres_migrations.py
 
