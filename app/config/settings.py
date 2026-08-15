@@ -31,9 +31,18 @@ def _parse_email_csv(value: Any) -> list[str]:
     return parse_csv_env(value, lowercase=True)
 
 
+def _parse_auth_mode(value: Any) -> Any:
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized == "disable":
+            return "disabled"
+        return normalized
+    return value
+
+
 CsvList = Annotated[list[str], NoDecode, BeforeValidator(_parse_csv)]
 EmailCsvList = Annotated[list[str], NoDecode, BeforeValidator(_parse_email_csv)]
-AuthMode = Literal["disabled", "easyauth"]
+AuthMode = Annotated[Literal["disabled", "easyauth"], BeforeValidator(_parse_auth_mode)]
 
 
 class Settings(BaseSettings):
