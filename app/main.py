@@ -14,7 +14,12 @@ from app.auth.permissions import has_permission, permission_names, require_permi
 from app.auth.provider import get_current_user
 from app.config.settings import get_settings
 from app.database.session import database_status, get_db
-from app.models import Event, Shift, Volunteer
+from app.models import AssignmentStatus, Event, Shift, ShiftAssignment, Volunteer
+from app.services.checkins import (
+    CheckInError,
+    check_in_assignment,
+    check_out_assignment,
+)
 
 admin_dependency = Depends(require_permission("admin"))
 db_dependency = Depends(get_db)
@@ -138,6 +143,66 @@ def create_event(
     db.add(event)
     db.commit()
     return RedirectResponse(url="/admin", status_code=303)
+
+
+@app.get("/admin/check-in", tags=["admin"])
+def checkin_page(
+    request: Request, db: Session = db_dependency, admin_user=admin_dependency
+):
+    assignments = list(
+        db.scalars(
+            select(ShiftAssignment).where(
+                ShiftAssignment.assignment_status.in_(
+                    [AssignmentStatus.confirmed, AssignmentStatus.checked_in]
+                )
+            )
+        )
+    )
+    return templates.TemplateResponse(
+        "admin_checkin.html",
+        {"request": request, "assignments": assignments, "error": None},
+    )
+
+
+@app.post("/admin/check-in/{assignment_id}", tags=["admin"])
+def checkin_submit(
+    assignment_id: int,
+    db: Session = db_dependency,
+    admin_user=admin_dependency,
+    lanyard: Annotated[bool, Form()] = False,
+    wristband: Annotated[bool, Form()] = False,
+    radio: Annotated[bool, Form()] = False,
+    other: Annotated[str | None, Form()] = None,
+):
+    assignment = db.get(ShiftAssignment, assignment_id)
+    if assignment is None:
+        raise HTTPException(status_code=404)
+    try:
+        check_in_assignment(
+            db,
+            assignment,
+            lanyard=lanyard,
+            wristband=wristband,
+            radio=radio,
+            other=other,
+        )
+    except CheckInError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return RedirectResponse(url="/admin/check-in", status_code=303)
+
+
+@app.post("/admin/check-in/{assignment_id}/check-out", tags=["admin"])
+def checkout_submit(
+    assignment_id: int, db: Session = db_dependency, admin_user=admin_dependency
+):
+    assignment = db.get(ShiftAssignment, assignment_id)
+    if assignment is None:
+        raise HTTPException(status_code=404)
+    try:
+        check_out_assignment(db, assignment)
+    except CheckInError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return RedirectResponse(url="/admin/check-in", status_code=303)
 
 
 @app.get("/admin/db", tags=["admin"])
