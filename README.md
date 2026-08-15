@@ -186,6 +186,12 @@ The application listens on `http://localhost:8000`. Docker Compose mounts a pers
 
 The DEV GitHub Actions deployment keeps the existing Azure Container Apps deployment flow and then checks the deployed app health endpoint. Configure a GitHub environment secret named `DEV_APP_URL` on the `development` environment with the public base URL of the DEV app, for example `https://example-dev.example.azurecontainerapps.io`. The workflow calls `${DEV_APP_URL}/healthz` after deployment and fails unless the endpoint returns HTTP 200.
 
+If a new Container Apps revision does not become healthy, the workflow keeps the
+previous healthy revision serving traffic and records the newest revision's
+provisioning/health state plus bounded system and console logs in the failed job.
+The diagnostic output contains no application secrets and makes revision startup
+failures visible without weakening the public health checks.
+
 Azure Container App ingress must target port `8000`, which is the port exposed by the application container. Before enabling SQLite-backed features, configure persistent storage mounted at `/data` so the default SQLite database path `/data/app.db` is durable across container restarts and revisions.
 
 Bei jedem Push nach `dev` baut die Pipeline die Commit-SHA als `APP_VERSION` in das
