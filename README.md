@@ -116,7 +116,7 @@ scripts/        Maintenance and automation scripts
 
 ## Database and Migrations
 
-The application uses SQLite through SQLAlchemy. Runtime configuration comes from `DATABASE_URL` in `Settings`; by default it points at `sqlite:////data/app.db`, so containers should mount persistent storage at `/data`. The application does not create tables on production startup. Apply Alembic migrations before serving traffic.
+The application uses SQLite through SQLAlchemy. Runtime configuration comes from `DATABASE_URL` in `Settings`; by default it points at `sqlite:////data/app.db`, so containers should mount persistent storage at `/data`. The container executes `alembic upgrade head` before Uvicorn starts. This controlled, idempotent release step prevents a new revision from serving against an older schema; a failed migration prevents that revision from starting. GitHub CI also runs the migrations twice against a temporary SQLite database.
 
 Run migrations locally:
 
@@ -136,7 +136,7 @@ Run migrations in the container before starting or as an operational command:
 docker compose run --rm app alembic upgrade head
 ```
 
-Before deployment, run `alembic upgrade head` as a release/pre-start step against the persistent `/data/app.db` volume, then start the application container. This keeps schema changes explicit and avoids unsafe auto-create behavior in production.
+For a manual operational migration, run `alembic upgrade head` against the persistent `/data/app.db` before deployment. The container performs the same idempotent pre-start check automatically.
 
 Create the default draft event idempotently after migrations:
 

@@ -20,3 +20,8 @@ jobs:
         run: black --check .
       - name: Test
         run: pytest
+      - name: Verify Alembic migrations are repeatable
+        run: |
+          database_path="$RUNNER_TEMP/stpride-migration-check.db"
+          DATABASE_URL="sqlite:///$database_path" alembic upgrade head
+          DATABASE_URL="sqlite:///$database_path" alembic upgrade head
