@@ -64,6 +64,14 @@ bleiben. Admin-Änderungen werden im vorhandenen Audit-Log protokolliert. Unter
 einsehbar. Briefings sowie druckfreundliche Schicht- und Check-in-Listen werden
 über die jeweilige Veranstaltungsansicht verwaltet bzw. geöffnet.
 
+E-Mail-Adressen werden serverseitig nach gängigen Syntaxregeln validiert;
+`example.invalid` bleibt für sichere Demo-Daten ausdrücklich zulässig. Unter
+`/admin/einstellungen/smtp` verwaltet die Administration Host, Port,
+Benutzername, Absender, TLS-Modus und Aktivstatus. Das Passwort wird
+ausschließlich aus `SMTP_PASSWORD` gelesen und nie in SQLite gespeichert.
+Outbox-Nachrichten werden erst nach einem ausdrücklichen Admin-Klick versendet;
+Fehler- und Versandstatus bleiben nachvollziehbar.
+
 ## Technology Stack
 
 - Python 3.13
@@ -257,6 +265,7 @@ Required runtime variables:
 | `DEBUG` | Enables temporary DEV troubleshooting endpoints when `true`. Keep unset or `false` in production. |
 | `ADMIN_ALLOWED_EMAILS` | Comma-separated administrator email allowlist. Useful for DEV. |
 | `ADMIN_ALLOWED_GROUP_IDS` | Comma-separated administrator Entra group object ID allowlist. |
+| `SMTP_PASSWORD` | SMTP password as an environment/Azure secret; never stored through the admin UI. |
 
 Admin access is allowed when `AUTH_MODE=disabled`, or when the authenticated EasyAuth user matches `ADMIN_ALLOWED_EMAILS` or `ADMIN_ALLOWED_GROUP_IDS`. If neither allowlist is configured in `AUTH_MODE=easyauth`, admin access is denied by default.
 

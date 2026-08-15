@@ -33,6 +33,7 @@ from app.models import (
     Shift,
     ShiftAssignment,
     ShiftStatus,
+    SMTPConfiguration,
     Team,
     TeamMaterial,
     Volunteer,
@@ -50,8 +51,15 @@ from app.services.checkins import (
     check_in_assignment,
     check_out_assignment,
 )
+from app.services.email_addresses import EmailAddressError, validate_email_address
+from app.services.mail_delivery import (
+    MailDeliveryError,
+    get_smtp_configuration,
+    send_outbox_message,
+    smtp_password_configured,
+)
 from app.services.qr_codes import qr_svg
-from app.services.volunteers import deterministic_email_hash, normalize_email
+from app.services.volunteers import deterministic_email_hash
 
 admin_dependency = Depends(require_permission("admin"))
 db_dependency = Depends(get_db)
@@ -1001,14 +1009,18 @@ def create_volunteer_admin(
     error = None
     if event is None:
         error = "Bitte eine Veranstaltung auswählen."
-    elif not first_name.strip() or not last_name.strip() or "@" not in email:
+    elif not first_name.strip() or not last_name.strip():
         error = "Vorname, Nachname und eine gültige E-Mail-Adresse sind erforderlich."
+    try:
+        normalized_email = validate_email_address(email)
+    except EmailAddressError as exc:
+        normalized_email = email.strip().lower()
+        error = str(exc)
     try:
         parsed_age_group = AgeGroup(age_group)
     except ValueError:
         parsed_age_group = AgeGroup.adult
         error = "Ungültige Altersgruppe."
-    normalized_email = normalize_email(email)
     if event and db.scalar(
         select(Volunteer).where(
             Volunteer.event_id == event.id,
@@ -1030,9 +1042,9 @@ def create_volunteer_admin(
         event=event,
         first_name=first_name.strip(),
         last_name=last_name.strip(),
-        email=email.strip(),
+        email=normalized_email,
         email_normalized=normalized_email,
-        email_hash=deterministic_email_hash(email),
+        email_hash=deterministic_email_hash(normalized_email),
         phone=phone.strip() or None,
         age_group=parsed_age_group,
     )
@@ -1164,8 +1176,122 @@ def outbox_preview(
         db.scalars(select(OutboxMessage).order_by(OutboxMessage.created_at.desc()))
     )
     return templates.TemplateResponse(
-        "admin_outbox.html", {"request": request, "messages": messages}
+        "admin_outbox.html",
+        {
+            "request": request,
+            "messages": messages,
+            "smtp_configuration": get_smtp_configuration(db),
+            "smtp_password_configured": smtp_password_configured(),
+        },
     )
+
+
+@app.post("/admin/outbox/{message_id}/senden", tags=["admin"])
+def send_outbox_message_admin(
+    message_id: int, db: Session = db_dependency, admin_user=admin_dependency
+):
+    message = db.get(OutboxMessage, message_id)
+    if message is None:
+        raise HTTPException(status_code=404)
+    if message.sent_at is not None:
+        raise HTTPException(
+            status_code=422, detail="Nachricht wurde bereits versendet."
+        )
+    try:
+        send_outbox_message(db, message)
+    except MailDeliveryError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    record_audit(
+        db,
+        action="outbox.sent",
+        entity_type="outbox_message",
+        entity_id=message.id,
+    )
+    db.commit()
+    return RedirectResponse(url="/admin/outbox", status_code=303)
+
+
+@app.get("/admin/einstellungen/smtp", tags=["admin"])
+def smtp_configuration_form(
+    request: Request, db: Session = db_dependency, admin_user=admin_dependency
+):
+    return templates.TemplateResponse(
+        "admin_smtp.html",
+        {
+            "request": request,
+            "configuration": get_smtp_configuration(db),
+            "password_configured": smtp_password_configured(),
+            "error": None,
+        },
+    )
+
+
+@app.post("/admin/einstellungen/smtp", tags=["admin"])
+def smtp_configuration_submit(
+    request: Request,
+    db: Session = db_dependency,
+    admin_user=admin_dependency,
+    host: Annotated[str, Form()] = "",
+    port: Annotated[int, Form()] = 587,
+    username: Annotated[str, Form()] = "",
+    from_email: Annotated[str, Form()] = "",
+    from_name: Annotated[str, Form()] = "ST. PRIDE Volunteer Management",
+    use_starttls: Annotated[bool, Form()] = False,
+    use_ssl: Annotated[bool, Form()] = False,
+    enabled: Annotated[bool, Form()] = False,
+):
+    configuration = get_smtp_configuration(db)
+    error = None
+    try:
+        normalized_from = validate_email_address(from_email)
+    except EmailAddressError as exc:
+        normalized_from = from_email.strip().lower()
+        error = str(exc)
+    if not host.strip():
+        error = "SMTP-Host ist erforderlich."
+    elif not 1 <= port <= 65535:
+        error = "SMTP-Port muss zwischen 1 und 65535 liegen."
+    elif use_starttls and use_ssl:
+        error = "SSL und STARTTLS dürfen nicht gleichzeitig aktiv sein."
+    elif enabled and username.strip() and not smtp_password_configured():
+        error = "Vor dem Aktivieren muss SMTP_PASSWORD als Secret gesetzt sein."
+    if error:
+        return templates.TemplateResponse(
+            "admin_smtp.html",
+            {
+                "request": request,
+                "configuration": configuration,
+                "password_configured": smtp_password_configured(),
+                "error": error,
+            },
+            status_code=422,
+        )
+    if configuration is None:
+        configuration = SMTPConfiguration(host=host.strip(), from_email=normalized_from)
+        db.add(configuration)
+    configuration.host = host.strip()
+    configuration.port = port
+    configuration.username = username.strip() or None
+    configuration.from_email = normalized_from
+    configuration.from_name = from_name.strip() or "ST. PRIDE Volunteer Management"
+    configuration.use_starttls = use_starttls
+    configuration.use_ssl = use_ssl
+    configuration.enabled = enabled
+    db.flush()
+    record_audit(
+        db,
+        action="smtp_configuration.updated",
+        entity_type="smtp_configuration",
+        entity_id=configuration.id,
+        changes={
+            "host": configuration.host,
+            "port": configuration.port,
+            "enabled": configuration.enabled,
+            "password_configured": smtp_password_configured(),
+        },
+    )
+    db.commit()
+    return RedirectResponse(url="/admin/einstellungen/smtp", status_code=303)
 
 
 @app.get("/admin/veranstaltungen/{event_id}/briefings", tags=["admin"])

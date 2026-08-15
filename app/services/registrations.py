@@ -15,6 +15,7 @@ from secrets import token_urlsafe
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
+from app.config.settings import get_settings
 from app.models import (
     AgeGroup,
     AssignmentSource,
@@ -29,7 +30,8 @@ from app.models import (
     VolunteerStatus,
 )
 from app.models.core import utcnow
-from app.services.volunteers import deterministic_email_hash, normalize_email
+from app.services.email_addresses import EmailAddressError, validate_email_address
+from app.services.volunteers import deterministic_email_hash
 
 
 class RegistrationError(ValueError):
@@ -188,7 +190,10 @@ def create_registration(
     shifts = _selected_shifts(db, event, shift_ids)
     statuses = {shift.id: _assignment_status(db, shift) for shift in shifts}
     edit_token = token_urlsafe(32)
-    email = normalize_email(data.email)
+    try:
+        email = validate_email_address(data.email)
+    except EmailAddressError as exc:
+        raise RegistrationError(str(exc)) from exc
     volunteer = Volunteer(
         event=event,
         first_name=data.first_name.strip(),
@@ -236,7 +241,14 @@ def create_registration(
             volunteer_id=volunteer.id,
             kind="registration_confirmation",
             subject=f"Deine Anmeldung für {event.name}",
-            body="Die Bestätigung wird im Prototyp nur als Vorschau gespeichert.",
+            body=(
+                f"Hallo {volunteer.first_name},\n\n"
+                f"deine Anmeldung für {event.name} wurde erfasst. "
+                "Du kannst sie über diesen persönlichen Link ansehen und ändern:\n"
+                f"{get_settings().app_base_url.rstrip('/')}/anmeldung/"
+                f"{edit_token}/bestaetigung\n\nST. PRIDE"
+            ),
+            recipient_email=email,
         )
     )
     db.commit()
@@ -324,7 +336,10 @@ def update_registration(
         db.add(assignment)
         assignments.append(assignment)
 
-    email = normalize_email(data.email)
+    try:
+        email = validate_email_address(data.email)
+    except EmailAddressError as exc:
+        raise RegistrationError(str(exc)) from exc
     volunteer.first_name = data.first_name.strip()
     volunteer.last_name = data.last_name.strip()
     volunteer.email = email
@@ -340,7 +355,8 @@ def update_registration(
             volunteer_id=volunteer.id,
             kind="registration_updated",
             subject="Deine Anmeldung wurde aktualisiert",
-            body="Die Aktualisierung wird im Prototyp nur als Vorschau gespeichert.",
+            body="Deine Kontaktdaten oder Schichten wurden aktualisiert.",
+            recipient_email=email,
         )
     )
     db.commit()
@@ -364,7 +380,8 @@ def cancel_assignment(db: Session, volunteer: Volunteer, assignment_id: int) -> 
             volunteer_id=volunteer.id,
             kind="registration_cancellation",
             subject="Deine Schicht wurde storniert",
-            body="Die Stornierung wird im Prototyp nur als Vorschau gespeichert.",
+            body="Eine deiner Schichten wurde storniert.",
+            recipient_email=volunteer.email,
         )
     )
     db.commit()
