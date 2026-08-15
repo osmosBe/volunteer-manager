@@ -39,6 +39,7 @@ def test_admin_can_create_plan_edit_and_duplicate_event(tmp_path):
                 "contact_email": "kontakt@example.org",
                 "briefing": "Sicherheitsbriefing",
                 "accessibility_info": "Stufenlos erreichbar",
+                "allows_minors": "true",
             },
             follow_redirects=False,
         )
@@ -46,6 +47,7 @@ def test_admin_can_create_plan_edit_and_duplicate_event(tmp_path):
         event_url = response.headers["location"]
         event_id = int(event_url.rsplit("/", 1)[1])
         assert client.get(event_url).status_code == 200
+        assert client.get("/admin/briefings").status_code == 200
         volunteer_response = client.post(
             "/admin/ehrenamtliche/neu",
             data={
@@ -192,6 +194,7 @@ def test_admin_can_create_plan_edit_and_duplicate_event(tmp_path):
                 "Ausführliche öffentliche Beschreibung"
             )
             assert db.get(Event, event_id).contact_email == "kontakt@example.org"
+            assert db.get(Event, event_id).allows_minors is True
             assert db.get(Shift, shift_id).title == "Info Früh aktualisiert"
             assert db.get(Shift, shift_id).needed_count == 4
     finally:

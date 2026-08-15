@@ -54,6 +54,7 @@ def test_public_registration_and_cancellation_flow(tmp_path):
                 "first_name": "Alex",
                 "last_name": "Muster",
                 "email": "alex@example.org",
+                "birth_date": "1990-01-01",
                 "contact_consent": "true",
                 "shift_ids": str(shift_id),
             },

@@ -230,6 +230,7 @@ def create_event(
     clothing_and_material: Annotated[str, Form()] = "",
     catering_info: Annotated[str, Form()] = "",
     accessibility_info: Annotated[str, Form()] = "",
+    allows_minors: Annotated[bool, Form()] = False,
     status_value: Annotated[str, Form(alias="status")] = EventStatus.draft.value,
     is_public: Annotated[bool, Form()] = False,
 ):
@@ -312,6 +313,7 @@ def create_event(
         clothing_and_material=clothing_and_material.strip() or None,
         catering_info=catering_info.strip() or None,
         accessibility_info=accessibility_info.strip() or None,
+        allows_minors=allows_minors,
         status=event_status,
         is_public=is_public,
     )
@@ -387,6 +389,7 @@ def edit_event_submit(
     clothing_and_material: Annotated[str, Form()] = "",
     catering_info: Annotated[str, Form()] = "",
     accessibility_info: Annotated[str, Form()] = "",
+    allows_minors: Annotated[bool, Form()] = False,
     status_value: Annotated[str, Form(alias="status")] = EventStatus.draft.value,
     is_public: Annotated[bool, Form()] = False,
 ):
@@ -443,6 +446,7 @@ def edit_event_submit(
     event.clothing_and_material = clothing_and_material.strip() or None
     event.catering_info = catering_info.strip() or None
     event.accessibility_info = accessibility_info.strip() or None
+    event.allows_minors = allows_minors
     event.status = event_status
     event.is_public = is_public
     record_audit(
@@ -485,6 +489,7 @@ def duplicate_event(
         clothing_and_material=source.clothing_and_material,
         catering_info=source.catering_info,
         accessibility_info=source.accessibility_info,
+        allows_minors=source.allows_minors,
         status=EventStatus.draft,
         is_public=False,
     )
@@ -1499,6 +1504,21 @@ def smtp_configuration_submit(
     )
     db.commit()
     return RedirectResponse(url="/admin/einstellungen/smtp", status_code=303)
+
+
+@app.get("/admin/briefings", tags=["admin"])
+def briefing_overview(
+    request: Request,
+    db: Session = db_dependency,
+    admin_user=admin_dependency,
+):
+    return templates.TemplateResponse(
+        "admin_briefing_overview.html",
+        {
+            "request": request,
+            "events": list(db.scalars(select(Event).order_by(Event.name))),
+        },
+    )
 
 
 @app.get("/admin/veranstaltungen/{event_id}/briefings", tags=["admin"])

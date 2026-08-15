@@ -209,7 +209,7 @@ def submit_registration(
     shift_ids: Annotated[list[int] | None, Form()] = None,
     phone: Annotated[str | None, Form()] = None,
     pronouns: Annotated[str | None, Form()] = None,
-    birth_date: Annotated[date | None, Form()] = None,
+    birth_date: Annotated[date, Form()] = ...,
     future_contact_consent: Annotated[bool, Form()] = False,
 ):
     event = get_public_event(db, slug)
@@ -340,7 +340,7 @@ def submit_registration_edit(
     shift_ids: Annotated[list[int] | None, Form()] = None,
     phone: Annotated[str | None, Form()] = None,
     pronouns: Annotated[str | None, Form()] = None,
-    birth_date: Annotated[date | None, Form()] = None,
+    birth_date: Annotated[date, Form()] = ...,
     future_contact_consent: Annotated[bool, Form()] = False,
 ):
     volunteer = get_volunteer_by_edit_token(db, token)

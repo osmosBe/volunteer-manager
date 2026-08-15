@@ -10,6 +10,7 @@
       <div class="col-md-6"><label class="form-label" for="first_name">Vorname</label><input class="form-control" required id="first_name" name="first_name" value="{{ volunteer.first_name }}"></div>
       <div class="col-md-6"><label class="form-label" for="last_name">Nachname</label><input class="form-control" required id="last_name" name="last_name" value="{{ volunteer.last_name }}"></div>
       <div class="col-md-6"><label class="form-label" for="email">E-Mail-Adresse</label><input class="form-control" required type="email" id="email" name="email" value="{{ volunteer.email }}"></div>
+      <div class="col-md-6"><label class="form-label" for="birth_date">Geburtsdatum</label><input class="form-control" required type="date" id="birth_date" name="birth_date" value="{{ volunteer.birth_date.isoformat() if volunteer.birth_date else '' }}"></div>
       <div class="col-md-6"><label class="form-label" for="phone">Telefonnummer</label><input class="form-control" id="phone" name="phone" value="{{ volunteer.phone or '' }}"></div>
       <div class="col-md-6"><label class="form-label" for="pronouns">Pronomen</label><input class="form-control" id="pronouns" name="pronouns" value="{{ volunteer.pronouns or '' }}"></div>
     </div></fieldset>

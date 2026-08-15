@@ -56,6 +56,7 @@ def test_landing_page_is_public(monkeypatch, tmp_path) -> None:
 
     assert response.status_code == 200
     assert "Gemeinsam machen wir PRIDE möglich" in response.text
+    assert 'href="/auth/login"' in response.text
     assert "Derzeit sind keine Anmeldungen geöffnet" in response.text
 
 
