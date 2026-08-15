@@ -1,5 +1,5 @@
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import select
@@ -8,6 +8,7 @@ from sqlalchemy.orm import sessionmaker
 from app.database.base import Base
 from app.database.session import create_database_engine
 from app.models import (
+    AgeGroup,
     AssignmentStatus,
     Event,
     EventStatus,
@@ -74,6 +75,7 @@ def registration_data(email="person@example.org"):
         first_name="Alex",
         last_name="Test",
         email=email,
+        birth_date=date(1990, 1, 1),
         contact_consent=True,
     )
 
@@ -175,6 +177,33 @@ def test_registration_rejects_invalid_email_but_allows_safe_demo_domain(db):
     assert result.volunteer.email == "demo-person@example.invalid"
 
 
+def test_event_and_shift_minor_rules_use_age_at_event_date(db):
+    event, first, _ = make_event_and_shifts(db)
+    event.starts_at = first.starts_at
+    db.commit()
+    event_day = event.starts_at.date()
+    minor_data = RegistrationData(
+        first_name="Jung",
+        last_name="Test",
+        email="minor@example.org",
+        birth_date=date(event_day.year - 17, event_day.month, event_day.day),
+        contact_consent=True,
+    )
+
+    with pytest.raises(RegistrationError, match="ab 18"):
+        create_registration(db, event, minor_data, [first.id])
+
+    event.allows_minors = True
+    db.commit()
+    with pytest.raises(RegistrationError, match="Schicht"):
+        create_registration(db, event, minor_data, [first.id])
+
+    first.allows_minors = True
+    db.commit()
+    result = create_registration(db, event, minor_data, [first.id])
+    assert result.volunteer.age_group == AgeGroup.age_16_17
+
+
 def test_cancelling_assignment_keeps_history_and_frees_capacity(db):
     event, first, _ = make_event_and_shifts(db, needed_count=1)
     result = create_registration(db, event, registration_data(), [first.id])
@@ -201,6 +230,7 @@ def test_update_registration_replaces_shifts_and_updates_contact_data(db):
             first_name="Sam",
             last_name="Beispiel",
             email="sam@example.org",
+            birth_date=date(1992, 2, 2),
             phone="+43 123",
             contact_consent=True,
             future_contact_consent=True,

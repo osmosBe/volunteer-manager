@@ -199,6 +199,44 @@ def _assignment_status(db: Session, shift: Shift) -> AssignmentStatus:
     return AssignmentStatus.waitlisted
 
 
+def age_on_date(birth_date: date, reference_date: date) -> int:
+    return (
+        reference_date.year
+        - birth_date.year
+        - (
+            (reference_date.month, reference_date.day)
+            < (birth_date.month, birth_date.day)
+        )
+    )
+
+
+def validate_participant_age(
+    event: Event, shifts: list[Shift], birth_date: date | None
+) -> AgeGroup:
+    if birth_date is None:
+        raise RegistrationError("Bitte gib dein Geburtsdatum an.")
+    reference_date = event.starts_at.date() if event.starts_at else utcnow().date()
+    age = age_on_date(birth_date, reference_date)
+    if age < 0:
+        raise RegistrationError("Das Geburtsdatum darf nicht in der Zukunft liegen.")
+    if age < 18 and not event.allows_minors:
+        raise RegistrationError(
+            "Bei dieser Veranstaltung ist eine Teilnahme erst ab 18 Jahren möglich."
+        )
+    if age < 18:
+        disallowed = [shift.title for shift in shifts if not shift.allows_minors]
+        if disallowed:
+            raise RegistrationError(
+                "Mindestens eine ausgewählte Schicht ist nicht für unter 18-Jährige "
+                "freigegeben: " + ", ".join(disallowed)
+            )
+    if age < 16:
+        return AgeGroup.under_16
+    if age < 18:
+        return AgeGroup.age_16_17
+    return AgeGroup.adult
+
+
 def create_registration(
     db: Session, event: Event, data: RegistrationData, shift_ids: list[int]
 ) -> RegistrationResult:
@@ -222,6 +260,7 @@ def create_registration(
 
     _validate_event_is_open(event)
     shifts = _selected_shifts(db, event, shift_ids)
+    age_group = validate_participant_age(event, shifts, data.birth_date)
     statuses = {shift.id: _assignment_status(db, shift) for shift in shifts}
     edit_token = token_urlsafe(32)
     try:
@@ -243,7 +282,7 @@ def create_registration(
         status=VolunteerStatus.submitted,
         phone=data.phone,
         pronouns=data.pronouns,
-        age_group=data.age_group,
+        age_group=age_group,
         birth_date=data.birth_date,
         emergency_contact_name=data.emergency_contact_name,
         emergency_contact_phone=data.emergency_contact_phone,
@@ -329,6 +368,7 @@ def update_registration(
         raise RegistrationError("Die Veranstaltung wurde nicht gefunden.")
     _validate_event_is_open(event)
     shifts = _selected_shifts(db, event, shift_ids)
+    age_group = validate_participant_age(event, shifts, data.birth_date)
     selected_ids = {shift.id for shift in shifts}
     active_assignments = {
         assignment.shift_id: assignment
@@ -387,6 +427,7 @@ def update_registration(
     volunteer.phone = data.phone
     volunteer.pronouns = data.pronouns
     volunteer.birth_date = data.birth_date
+    volunteer.age_group = age_group
     volunteer.contact_consent = True
     volunteer.future_contact_consent = data.future_contact_consent
     db.add(

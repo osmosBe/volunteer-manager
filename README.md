@@ -21,6 +21,11 @@ vollständige Schichtauswahl ändern; entfernte Zuteilungen werden nachvollziehb
 storniert und erneut gewählte, zuvor stornierte Zuteilungen werden reaktiviert.
 Die Bearbeitung verwendet denselben Kapazitäts-, Wartelisten- und
 Überschneidungscheck wie die Erstanmeldung.
+Das Geburtsdatum ist in der öffentlichen Anmeldung verpflichtend und wird für
+die Altersprüfung zum Beginn der Veranstaltung verwendet. Standardmäßig sind
+Veranstaltungen ab 18; die Administration kann U18-Teilnahme pro Veranstaltung
+grundsätzlich erlauben, wobei einzelne Schichten weiterhin eine strengere
+Freigabe behalten können.
 
 Zusätzlich zur serverseitigen Syntaxprüfung verwendet jede öffentliche Anmeldung
 ein Double-Opt-in: Ein zufälliger Einmal-Token wird ausschließlich gehasht
@@ -53,6 +58,9 @@ anlegen und aktualisieren. Bereiche, Aufgaben und alle Schichtdaten können
 bearbeitet werden; unbenutzte Planungselemente lassen sich entfernen, während
 Schichten mit historischen Zuteilungen nachvollziehbar abgesagt statt gelöscht
 werden. Die erste wartende Person kann kontrolliert nachrücken.
+Die öffentliche Startseite bietet einen Admin-Login, der über den vorhandenen
+Easy-Auth-Loginpfad führt. Die veranstaltungsbezogene Briefing-Verwaltung ist
+zusätzlich über den zentralen Menüpunkt `/admin/briefings` erreichbar.
 Zusätzlich stehen
 `/health/live` (Prozess-Liveness) und `/health/ready` (inklusive Datenbankzugriff)
 für Container-Orchestrierung zur Verfügung.

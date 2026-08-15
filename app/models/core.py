@@ -169,6 +169,7 @@ class Event(TimestampMixin, Base):
     clothing_and_material: Mapped[str | None] = mapped_column(Text)
     catering_info: Mapped[str | None] = mapped_column(Text)
     accessibility_info: Mapped[str | None] = mapped_column(Text)
+    allows_minors: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_public: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     teams: Mapped[list["Team"]] = relationship(
         back_populates="event", cascade="all, delete-orphan"

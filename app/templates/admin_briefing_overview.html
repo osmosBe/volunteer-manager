@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h1>Briefings</h1>
+    <a href="/admin">Dashboard</a>
+  </div>
+  <p class="alert alert-info">Briefings werden pro Veranstaltung verwaltet. Bestätigungen können in der Personenliste gesammelt dokumentiert werden.</p>
+  <div class="row g-3">
+    {% for event in events %}
+      <article class="col-md-6"><div class="card h-100"><div class="card-body">
+        <h2 class="h5">{{ event.name }}</h2>
+        <p>{{ event.briefings|length }} Briefing{{ '' if event.briefings|length == 1 else 's' }}</p>
+        <a class="btn btn-primary" href="/admin/veranstaltungen/{{ event.id }}/briefings">Verwalten</a>
+      </div></div></article>
+    {% else %}
+      <p>Noch keine Veranstaltungen vorhanden.</p>
+    {% endfor %}
+  </div>
+{% endblock %}
