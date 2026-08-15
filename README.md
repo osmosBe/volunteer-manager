@@ -113,10 +113,26 @@ For CLI deployment and existing-resource parameters, see [infra/README.md](infra
 
 ### 3. Bootstrap GitHub and OIDC
 
-Install and authenticate Azure CLI (`az`) and GitHub CLI (`gh`), then run:
+Install and authenticate Azure CLI (`az`) and GitHub CLI (`gh`). **Provision the
+Azure template from step 2 before running bootstrap.** Bootstrap deliberately
+does not create PostgreSQL, a Container Apps migration Job, or an ACR image from
+guessed values. This keeps an existing deployment safe.
+
+For a first setup, the recommended flow is interactive. It makes every selected
+Azure resource visible and works equally well for a new fork and an existing
+deployment:
 
 ```powershell
-pwsh ./scripts/bootstrap.ps1 `
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\bootstrap.ps1
+```
+
+Supply the GitHub owner/repository, Azure subscription ID, DEV Resource Group
+and tenant ID when prompted. The remaining Azure resource names are detected
+when they are unambiguous. A fully parameterized invocation is also supported
+for repeatable administration:
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\bootstrap.ps1 `
   -GitHubOwner "<OWNER>" `
   -GitHubRepository "<REPOSITORY>" `
   -AzureSubscriptionId "<SUBSCRIPTION-ID>" `
@@ -124,6 +140,58 @@ pwsh ./scripts/bootstrap.ps1 `
   -AzureTenantId "<TENANT-ID>" `
   -EnvironmentName "development"
 ```
+
+#### Bootstrap prompt guide
+
+1. **Azure Container Apps migration job name**: after the Bicep deployment,
+   bootstrap normally discovers the one migration Job automatically, so this
+   prompt is not shown. If it is shown, enter the name returned by the following
+   command. With the template defaults, it is `volunteer-dev-migrate`:
+
+   ```powershell
+   az containerapp job list --resource-group "<DEV-RESOURCE-GROUP>" --query "[].name" --output tsv
+   ```
+
+   If no Job is returned, stop with `Ctrl+C` and complete the Azure template
+   deployment first. Do not enter a legacy placeholder such as
+   `migrate-container-app`.
+
+2. **PostgreSQL `DATABASE_URL`**: this is requested only when the existing
+   Container App or migration Job lacks its `database-url` secret reference.
+   Azure cannot read a secret value back from one resource to copy it to the
+   other, so bootstrap asks once for the same value that was used to provision
+   PostgreSQL. Its required form is:
+
+   ```text
+   postgresql+psycopg://<ADMIN-LOGIN>:<URL-ENCODED-PASSWORD>@<SERVER-FQDN>:5432/volunteer?sslmode=require
+   ```
+
+   Find the server host with:
+
+   ```powershell
+   az postgres flexible-server list --resource-group "<DEV-RESOURCE-GROUP>" --query "[].{Name:name,Host:fullyQualifiedDomainName}" --output table
+   ```
+
+   Use the administrator password chosen during template deployment. It cannot
+   be recovered from Azure. URL-encode passwords containing special characters;
+   do not paste the password into GitHub, source files or shell history.
+   A blank URL is rejected before bootstrap changes an Azure secret.
+
+3. **Azure application (Client) ID**: if `AZURE_CLIENT_ID` already exists only
+   as a GitHub *Secret*, GitHub does not permit bootstrap to read it. Enter the
+   client ID of the **GitHub Actions OIDC application**, not the application ID
+   used by Container Apps EasyAuth. Find candidates and verify the federated
+   credential subject:
+
+   ```powershell
+   az ad app list --all --query "[?contains(displayName, 'volunteer')].{Name:displayName,ClientId:appId}" --output table
+   az ad app federated-credential list --id "<CLIENT-ID>" --query "[].{Name:name,Subject:subject,Issuer:issuer}" --output table
+   ```
+
+   The correct credential has the subject
+   `repo:<owner>/<repository>:environment:development`. A blank client ID
+   aborts before bootstrap writes GitHub Environment Variables; the existing
+   GitHub Secret is never overwritten.
 
 The script is idempotent. It discovers unambiguous Azure resources, preserves a
 matching OIDC application/federated credential, creates only missing GitHub
