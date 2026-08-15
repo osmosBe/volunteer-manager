@@ -6,7 +6,7 @@ from sqlalchemy.orm import sessionmaker
 from app.database.base import Base
 from app.database.session import create_database_engine, get_db
 from app.main import app
-from app.models import Event, EventStatus, Shift
+from app.models import Event, EventStatus, Shift, Volunteer
 
 
 def test_admin_can_create_plan_edit_and_duplicate_event(tmp_path):
@@ -38,6 +38,21 @@ def test_admin_can_create_plan_edit_and_duplicate_event(tmp_path):
         event_url = response.headers["location"]
         event_id = int(event_url.rsplit("/", 1)[1])
         assert client.get(event_url).status_code == 200
+        volunteer_response = client.post(
+            "/admin/ehrenamtliche/neu",
+            data={
+                "event_id": event_id,
+                "first_name": "Demo",
+                "last_name": "Admin",
+                "email": "admin-created@example.invalid",
+                "age_group": "adult",
+            },
+            follow_redirects=False,
+        )
+        assert volunteer_response.status_code == 303
+        assert volunteer_response.headers["location"].startswith(
+            "/admin/ehrenamtliche/"
+        )
 
         assert (
             client.post(
@@ -89,6 +104,7 @@ def test_admin_can_create_plan_edit_and_duplicate_event(tmp_path):
         with Session() as db:
             assert db.query(Event).count() == 2
             assert db.query(Shift).count() == 2
+            assert db.query(Volunteer).count() == 1
             assert db.get(Event, event_id).status == EventStatus.registration_open
     finally:
         app.dependency_overrides.clear()
