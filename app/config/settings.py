@@ -52,6 +52,7 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     environment: str = "development"
     database_url: str = Field(default="sqlite:////data/app.db")
+    seed_demo_data: bool = False
 
     app_base_url: str = "http://localhost:8000"
     auth_mode: AuthMode = "disabled"

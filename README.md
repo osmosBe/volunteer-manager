@@ -60,6 +60,18 @@ EasyAuth-Integration bleibt erhalten; `AUTH_MODE=disabled` ist ausschließlich
 für die lokale bzw. ausdrücklich freigegebene Prototyp-Entwicklung gedacht.
 Der aktuelle Stand ist nicht als öffentliches Produktivsystem freigegeben.
 
+Die DEV-Pipeline setzt ausschließlich für die nicht-persistente
+Entwicklungsumgebung gezielt `SEED_DEMO_DATA=true`, ohne andere Container-App-
+Variablen oder Secret-Referenzen zu ersetzen. Nach Migrationen erzeugt der
+Containerstart dadurch idempotent eine öffentlich sichtbare Demo-Veranstaltung
+mit fiktiven Bereichen, Aufgaben, Schichten, Materialien, 36 ausdrücklich als
+Demo gekennzeichneten Personen, unterschiedlichen Zuteilungsstatus, Check-ins,
+Briefing-Bestätigungen, Outbox-Zuständen und einem deaktivierten Beispiel-SMTP.
+Alle Adressen verwenden die reservierte Domain `example.invalid`; es findet kein
+realer Mailversand statt. In anderen Umgebungen bleibt der Seed standardmäßig
+deaktiviert. Lokal kann er bewusst mit `SEED_DEMO_DATA=true` beim Start oder mit
+`python -m scripts.seed_default_event` einmalig aktiviert werden.
+
 Der Adminbereich unter `/admin` zeigt Veranstaltungen an und erlaubt derzeit das
 Anlegen, Bearbeiten, Duplizieren und Archivieren. In der Veranstaltungsansicht
 können Bereiche, Aufgaben und Schichten angelegt sowie Status und Kapazitäten
@@ -327,6 +339,7 @@ Required runtime variables:
 | Variable | Description |
 | --- | --- |
 | `APP_BASE_URL` | Public base URL for the running app. |
+| `SEED_DEMO_DATA` | Idempotent fictional demo seed on container start; enabled only in DEV. |
 | `AUTH_MODE` | Use `easyauth` in Azure Container Apps. Use `disabled` only for local development. The legacy value `disable` remains accepted for existing DEV revisions. |
 | `DEBUG` | Enables temporary DEV troubleshooting endpoints when `true`. Keep unset or `false` in production. |
 | `ADMIN_ALLOWED_EMAILS` | Comma-separated administrator email allowlist. Useful for DEV. |
