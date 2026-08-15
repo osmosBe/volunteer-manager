@@ -93,5 +93,22 @@ def test_bulk_status_and_briefing_confirmation(tmp_path):
                 for volunteer in db.query(Volunteer).all()
             )
             assert db.query(BriefingConfirmation).count() == 2
+        detail = client.get(f"/admin/ehrenamtliche/{ids[0]}")
+        assert "Anmeldung ablehnen" in detail.text
+        rejected = client.post(
+            f"/admin/ehrenamtliche/{ids[0]}/ablehnen",
+            data={
+                "reason": "Leider keine passende Aufgabe verfügbar.",
+                "confirm": "ABLEHNEN",
+            },
+            follow_redirects=False,
+        )
+        assert rejected.status_code == 303
+        with Session() as db:
+            volunteer = db.get(Volunteer, ids[0])
+            assert volunteer.status == VolunteerStatus.rejected
+            assert (
+                volunteer.assignments[0].assignment_status == AssignmentStatus.rejected
+            )
     finally:
         app.dependency_overrides.clear()

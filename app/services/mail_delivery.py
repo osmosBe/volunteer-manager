@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.config.settings import get_settings
 from app.models import OutboxMessage, SMTPConfiguration, Volunteer
 from app.models.core import utcnow
+from app.services.mail_templates import AUTOMATIC
 
 
 class MailDeliveryError(RuntimeError):
@@ -67,3 +68,27 @@ def send_outbox_message(db: Session, message: OutboxMessage) -> None:
     message.sent_at = utcnow()
     message.last_error = None
     db.commit()
+
+
+def send_pending_automatic_messages(db: Session, volunteer_id: int) -> None:
+    """Best-effort delivery for messages configured as automatic."""
+    configuration = get_smtp_configuration(db)
+    if configuration is None or not configuration.enabled:
+        return
+    messages = list(
+        db.scalars(
+            select(OutboxMessage)
+            .where(
+                OutboxMessage.volunteer_id == volunteer_id,
+                OutboxMessage.delivery_mode == AUTOMATIC,
+                OutboxMessage.sent_at.is_(None),
+            )
+            .order_by(OutboxMessage.id)
+        )
+    )
+    for message in messages:
+        try:
+            send_outbox_message(db, message)
+        except MailDeliveryError:
+            # Registration/admin state remains committed; admins can retry.
+            continue

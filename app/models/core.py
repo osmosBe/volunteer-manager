@@ -495,6 +495,9 @@ class OutboxMessage(Base):
     subject: Mapped[str] = mapped_column(String(255), nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
     recipient_email: Mapped[str | None] = mapped_column(String(255))
+    delivery_mode: Mapped[str] = mapped_column(
+        String(20), default="manual", nullable=False
+    )
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_error: Mapped[str | None] = mapped_column(String(500))
     created_at: Mapped[datetime] = mapped_column(
@@ -515,6 +518,21 @@ class SMTPConfiguration(TimestampMixin, Base):
     use_starttls: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     use_ssl: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+
+class MailTemplate(TimestampMixin, Base):
+    __tablename__ = "mail_templates"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    key: Mapped[str] = mapped_column(
+        String(60), nullable=False, unique=True, index=True
+    )
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    trigger_description: Mapped[str] = mapped_column(String(500), nullable=False)
+    subject_template: Mapped[str] = mapped_column(String(255), nullable=False)
+    body_template: Mapped[str] = mapped_column(Text, nullable=False)
+    delivery_mode: Mapped[str] = mapped_column(
+        String(20), default="manual", nullable=False
+    )
 
 
 class VolunteerCustomField(TimestampMixin, Base):

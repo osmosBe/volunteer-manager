@@ -12,16 +12,19 @@ from app.models import (
     AuditLog,
     Event,
     EventStatus,
+    OutboxMessage,
     Shift,
     ShiftAssignment,
     ShiftStatus,
     Volunteer,
+    VolunteerStatus,
 )
 from app.services.admin import (
     AdminWorkflowError,
     anonymize_volunteer,
     assign_volunteer,
     promote_first_waitlisted,
+    reject_volunteer,
 )
 from app.services.volunteers import deterministic_email_hash, normalize_email
 
@@ -92,6 +95,31 @@ def test_promote_first_waitlisted_preserves_order_and_audits(db):
     assert promoted.assignment_status == AssignmentStatus.confirmed
     assert later.assignment_status == AssignmentStatus.waitlisted
     assert db.scalar(select(AuditLog).where(AuditLog.entity_id == str(assignment.id)))
+    assert db.scalar(
+        select(OutboxMessage).where(OutboxMessage.kind == "waitlist_promoted")
+    )
+
+
+def test_rejection_cancels_active_work_and_queues_explanation(db):
+    event, shift = build_shift(db)
+    volunteer = volunteer_for(db, event, 1)
+    assignment = ShiftAssignment(
+        volunteer=volunteer,
+        shift=shift,
+        assignment_status=AssignmentStatus.confirmed,
+    )
+    db.add(assignment)
+    db.commit()
+
+    message = reject_volunteer(db, volunteer, "Leider keine passende Aufgabe frei.")
+
+    assert volunteer.status == VolunteerStatus.rejected
+    assert volunteer.edit_token_revoked_at is not None
+    assert assignment.assignment_status == AssignmentStatus.rejected
+    assert message is not None
+    assert message.delivery_mode == "automatic"
+    assert "keine passende Aufgabe" in message.body
+    assert db.scalar(select(AuditLog).where(AuditLog.action == "volunteer.rejected"))
 
 
 def test_waitlist_cannot_be_promoted_over_capacity(db):

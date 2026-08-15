@@ -16,6 +16,7 @@ from app.models import (
     Shift,
     ShiftAssignment,
     ShiftStatus,
+    VolunteerStatus,
 )
 from app.services.registrations import (
     RegistrationData,
@@ -253,11 +254,35 @@ def test_update_registration_replaces_shifts_and_updates_contact_data(db):
         db.scalars(
             select(OutboxMessage).where(
                 OutboxMessage.volunteer_id == volunteer.id,
-                OutboxMessage.kind == "email_verification",
+                OutboxMessage.kind.in_(
+                    ["email_verification", "email_changed_verification"]
+                ),
             )
         )
     )
     assert len(verification_messages) == 2
+    by_kind = {message.kind: message for message in verification_messages}
+    assert by_kind["email_verification"].delivery_mode == "disabled"
+    assert by_kind["email_changed_verification"].delivery_mode == "automatic"
+
+
+def test_email_change_keeps_registration_and_assignment_confirmed(db):
+    event, first, _ = make_event_and_shifts(db)
+    result = create_registration(db, event, registration_data(), [first.id])
+    result.volunteer.status = VolunteerStatus.assigned
+    result.volunteer.email_verified_at = datetime.now(timezone.utc)
+    db.commit()
+
+    assignments = update_registration(
+        db,
+        result.volunteer,
+        registration_data("changed@example.org"),
+        [first.id],
+    )
+
+    assert assignments[0].assignment_status == AssignmentStatus.confirmed
+    assert result.volunteer.status == VolunteerStatus.assigned
+    assert result.volunteer.email_verified_at is None
 
 
 def test_update_registration_revives_a_cancelled_assignment(db):

@@ -15,13 +15,14 @@ Use fictional data only. With non-persistent DEV storage, run migrations and
 5. Add a draft shift or change capacity. Show manual waitlist promotion and
    the purpose-limited CSV and print views.
 6. Open `/admin/ehrenamtliche`, filter the list, inspect a fictional person and
-   demonstrate manual assignment with explicit conflict override.
+   demonstrate manual assignment with explicit conflict override. Show the
+   controlled rejection workflow and explain that it releases active shifts.
 7. In `/admin/check-in`, check a confirmed assignment in with material and then
    check it out with material return.
 8. Open `/admin/outbox` and show delivery/error status. Optionally show
    `/admin/einstellungen/smtp`; the password remains an environment secret.
-   Verification mail is automatic only when SMTP is enabled; other messages
-   require an explicit click.
+   All messages follow the transparent rules under
+   `/admin/einstellungen/mail-templates`.
 9. Finish at `/healthz`, `/health/live` and `/health/ready`; verify the deployed
    version equals the expected `dev` commit SHA.
 
@@ -33,4 +34,5 @@ Use fictional data only. With non-persistent DEV storage, run migrations and
 - Volunteers: `/admin/ehrenamtliche`
 - Check-in: `/admin/check-in`
 - Outbox preview: `/admin/outbox`
+- Mail flow and templates: `/admin/einstellungen/mail-templates`
 - Diagnostics: `/healthz`, `/health/live`, `/health/ready`, `/admin/db`

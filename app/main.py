@@ -29,6 +29,7 @@ from app.models import (
     BriefingConfirmation,
     Event,
     EventStatus,
+    MailTemplate,
     OutboxMessage,
     Role,
     Shift,
@@ -47,6 +48,7 @@ from app.services.admin import (
     change_assignment_status,
     promote_first_waitlisted,
     record_audit,
+    reject_volunteer,
 )
 from app.services.checkins import (
     CheckInError,
@@ -58,7 +60,13 @@ from app.services.mail_delivery import (
     MailDeliveryError,
     get_smtp_configuration,
     send_outbox_message,
+    send_pending_automatic_messages,
     smtp_password_configured,
+)
+from app.services.mail_templates import (
+    DELIVERY_MODES,
+    ensure_mail_templates,
+    unknown_placeholders,
 )
 from app.services.qr_codes import qr_svg
 from app.services.volunteers import deterministic_email_hash
@@ -950,9 +958,10 @@ def promote_waitlist(
     if shift is None:
         raise HTTPException(status_code=404)
     try:
-        promote_first_waitlisted(db, shift)
+        assignment = promote_first_waitlisted(db, shift)
     except AdminWorkflowError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    send_pending_automatic_messages(db, assignment.volunteer_id)
     return RedirectResponse(
         url=f"/admin/veranstaltungen/{shift.event_id}", status_code=303
     )
@@ -1119,15 +1128,20 @@ def volunteer_bulk_action(
             raise HTTPException(
                 status_code=422, detail="Ungültiger Personenstatus."
             ) from exc
-        for volunteer in volunteers:
-            volunteer.status = new_status
-            record_audit(
-                db,
-                action="volunteer.bulk_status_changed",
-                entity_type="volunteer",
-                entity_id=volunteer.id,
-                changes={"status": new_status.value},
-            )
+        if new_status == VolunteerStatus.rejected:
+            for volunteer in volunteers:
+                reject_volunteer(db, volunteer, "Entscheidung des Organisationsteams")
+                send_pending_automatic_messages(db, volunteer.id)
+        else:
+            for volunteer in volunteers:
+                volunteer.status = new_status
+                record_audit(
+                    db,
+                    action="volunteer.bulk_status_changed",
+                    entity_type="volunteer",
+                    entity_id=volunteer.id,
+                    changes={"status": new_status.value},
+                )
     elif action == "assignment_status":
         try:
             new_status = AssignmentStatus(value)
@@ -1380,6 +1394,27 @@ def volunteer_anonymize_submit(
     return RedirectResponse(url=f"/admin/ehrenamtliche/{volunteer.id}", status_code=303)
 
 
+@app.post("/admin/ehrenamtliche/{volunteer_id}/ablehnen", tags=["admin"])
+def volunteer_reject_submit(
+    volunteer_id: int,
+    db: Session = db_dependency,
+    admin_user=admin_dependency,
+    reason: Annotated[str, Form()] = "",
+    confirm: Annotated[str, Form()] = "",
+):
+    volunteer = db.get(Volunteer, volunteer_id)
+    if volunteer is None:
+        raise HTTPException(status_code=404)
+    if confirm != "ABLEHNEN":
+        raise HTTPException(status_code=422, detail="Bestätigung fehlt")
+    try:
+        reject_volunteer(db, volunteer, reason)
+    except AdminWorkflowError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    send_pending_automatic_messages(db, volunteer.id)
+    return RedirectResponse(url=f"/admin/ehrenamtliche/{volunteer.id}", status_code=303)
+
+
 @app.get("/admin/outbox", tags=["admin"])
 def outbox_preview(
     request: Request, db: Session = db_dependency, admin_user=admin_dependency
@@ -1394,6 +1429,7 @@ def outbox_preview(
             "messages": messages,
             "smtp_configuration": get_smtp_configuration(db),
             "smtp_password_configured": smtp_password_configured(),
+            "mail_templates": ensure_mail_templates(db),
         },
     )
 
@@ -1409,6 +1445,8 @@ def send_outbox_message_admin(
         raise HTTPException(
             status_code=422, detail="Nachricht wurde bereits versendet."
         )
+    if message.delivery_mode == "disabled":
+        raise HTTPException(status_code=422, detail="Nachricht ist deaktiviert.")
     try:
         send_outbox_message(db, message)
     except MailDeliveryError as exc:
@@ -1504,6 +1542,64 @@ def smtp_configuration_submit(
     )
     db.commit()
     return RedirectResponse(url="/admin/einstellungen/smtp", status_code=303)
+
+
+@app.get("/admin/einstellungen/mail-templates", tags=["admin"])
+def mail_template_settings(
+    request: Request,
+    db: Session = db_dependency,
+    admin_user=admin_dependency,
+):
+    return templates.TemplateResponse(
+        "admin_mail_templates.html",
+        {
+            "request": request,
+            "mail_templates": ensure_mail_templates(db),
+            "delivery_modes": ["automatic", "manual", "disabled"],
+        },
+    )
+
+
+@app.post("/admin/einstellungen/mail-templates/{template_key}", tags=["admin"])
+def mail_template_update(
+    template_key: str,
+    db: Session = db_dependency,
+    admin_user=admin_dependency,
+    subject_template: Annotated[str, Form()] = "",
+    body_template: Annotated[str, Form()] = "",
+    delivery_mode: Annotated[str, Form()] = "manual",
+):
+    ensure_mail_templates(db)
+    template = db.scalar(select(MailTemplate).where(MailTemplate.key == template_key))
+    if template is None:
+        raise HTTPException(status_code=404)
+    clean_subject = " ".join(subject_template.splitlines()).strip()
+    if not clean_subject or not body_template.strip():
+        raise HTTPException(
+            status_code=422, detail="Betreff und Text sind erforderlich"
+        )
+    if len(clean_subject) > 255:
+        raise HTTPException(status_code=422, detail="Betreff ist zu lang")
+    unknown = unknown_placeholders(clean_subject + "\n" + body_template)
+    if unknown:
+        raise HTTPException(
+            status_code=422,
+            detail="Unbekannte Platzhalter: " + ", ".join(sorted(unknown)),
+        )
+    if delivery_mode not in DELIVERY_MODES:
+        raise HTTPException(status_code=422, detail="Ungültiger Versandmodus")
+    template.subject_template = clean_subject
+    template.body_template = body_template.strip()
+    template.delivery_mode = delivery_mode
+    record_audit(
+        db,
+        action="mail_template.updated",
+        entity_type="mail_template",
+        entity_id=template.id,
+        changes={"key": template.key, "delivery_mode": delivery_mode},
+    )
+    db.commit()
+    return RedirectResponse(url="/admin/einstellungen/mail-templates", status_code=303)
 
 
 @app.get("/admin/briefings", tags=["admin"])
