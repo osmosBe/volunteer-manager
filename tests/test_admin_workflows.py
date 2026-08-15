@@ -20,6 +20,7 @@ from app.models import (
 from app.services.admin import (
     AdminWorkflowError,
     anonymize_volunteer,
+    assign_volunteer,
     promote_first_waitlisted,
 )
 from app.services.volunteers import deterministic_email_hash, normalize_email
@@ -139,3 +140,44 @@ def test_anonymization_removes_personal_data_but_keeps_assignments(db):
     assert volunteer.anonymized_at is not None
     assert db.get(ShiftAssignment, assignment.id) is not None
     assert db.scalar(select(AuditLog).where(AuditLog.action == "volunteer.anonymized"))
+
+
+def test_admin_assignment_requires_explicit_override_for_time_conflict(db):
+    event, first_shift = build_shift(db, capacity=2)
+    volunteer = volunteer_for(db, event, 1)
+    db.add(
+        ShiftAssignment(
+            volunteer=volunteer,
+            shift=first_shift,
+            assignment_status=AssignmentStatus.confirmed,
+        )
+    )
+    overlapping = Shift(
+        event=event,
+        title="Parallel",
+        starts_at=first_shift.starts_at + timedelta(minutes=30),
+        ends_at=first_shift.ends_at + timedelta(minutes=30),
+        needed_count=2,
+        status=ShiftStatus.open,
+    )
+    db.add(overlapping)
+    db.commit()
+
+    with pytest.raises(AdminWorkflowError, match="zweite Bestätigung"):
+        assign_volunteer(db, volunteer, overlapping)
+
+    assignment = assign_volunteer(db, volunteer, overlapping, override_conflict=True)
+    assert assignment.assignment_status == AssignmentStatus.confirmed
+
+
+def test_admin_cannot_overbook_but_can_waitlist(db):
+    event, shift = build_shift(db)
+    first = volunteer_for(db, event, 1)
+    second = volunteer_for(db, event, 2)
+    assign_volunteer(db, first, shift)
+
+    with pytest.raises(AdminWorkflowError, match="voll"):
+        assign_volunteer(db, second, shift)
+
+    assignment = assign_volunteer(db, second, shift, status=AssignmentStatus.waitlisted)
+    assert assignment.assignment_status == AssignmentStatus.waitlisted

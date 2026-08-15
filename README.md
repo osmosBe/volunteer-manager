@@ -45,7 +45,10 @@ CSV-Exporte sind zweckgebunden pro Veranstaltung verfügbar: Kontaktliste unter
 nicht exportiert.
 
 Die Personenliste bietet Veranstaltungs-, Zuteilungsstatus- und U18-Filter. Die
-Detailansicht erlaubt Statusänderungen und eine explizit bestätigte,
+Verwaltung kann Personen manuell anlegen und ihnen Schichten als bestätigt,
+offen oder Warteliste zuweisen. Zeitüberschneidungen benötigen eine ausdrückliche
+zweite Bestätigung; volle Schichten können nicht versehentlich überbucht werden.
+Die Detailansicht erlaubt Statusänderungen und eine explizit bestätigte,
 irreversible Anonymisierung, bei der historische Einsatzstatistiken erhalten
 bleiben. Admin-Änderungen werden im vorhandenen Audit-Log protokolliert. Unter
 `/admin/outbox` sind gespeicherte, ausdrücklich nicht versendete Nachrichten

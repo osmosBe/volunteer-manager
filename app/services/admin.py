@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import (
+    AssignmentSource,
     AssignmentStatus,
     AuditLog,
     Shift,
@@ -19,6 +20,14 @@ from app.models.core import utcnow
 
 class AdminWorkflowError(ValueError):
     pass
+
+
+ACTIVE_ASSIGNMENT_STATUSES = {
+    AssignmentStatus.pending,
+    AssignmentStatus.confirmed,
+    AssignmentStatus.checked_in,
+    AssignmentStatus.attended,
+}
 
 
 def record_audit(
@@ -60,6 +69,76 @@ def change_assignment_status(
         entity_type="shift_assignment",
         entity_id=assignment.id,
         changes={"from": old_status.value, "to": new_status.value},
+    )
+    db.commit()
+    return assignment
+
+
+def assign_volunteer(
+    db: Session,
+    volunteer: Volunteer,
+    shift: Shift,
+    *,
+    status: AssignmentStatus = AssignmentStatus.confirmed,
+    override_conflict: bool = False,
+) -> ShiftAssignment:
+    if volunteer.event_id != shift.event_id:
+        raise AdminWorkflowError(
+            "Person und Schicht gehören nicht zur selben Veranstaltung."
+        )
+    existing = db.scalar(
+        select(ShiftAssignment).where(
+            ShiftAssignment.volunteer_id == volunteer.id,
+            ShiftAssignment.shift_id == shift.id,
+        )
+    )
+    if existing is not None:
+        return change_assignment_status(db, existing, status)
+    conflicts = [
+        item
+        for item in volunteer.assignments
+        if item.assignment_status in ACTIVE_ASSIGNMENT_STATUSES
+        and item.shift.starts_at < shift.ends_at
+        and item.shift.ends_at > shift.starts_at
+    ]
+    if conflicts and not override_conflict:
+        names = ", ".join(item.shift.title for item in conflicts)
+        raise AdminWorkflowError(
+            f"Zeitkonflikt mit {names}. Für das Übersteuern ist eine "
+            "zweite Bestätigung nötig."
+        )
+    occupied = sum(
+        item.assignment_status
+        in {
+            AssignmentStatus.confirmed,
+            AssignmentStatus.checked_in,
+            AssignmentStatus.attended,
+        }
+        for item in shift.assignments
+    )
+    if status == AssignmentStatus.confirmed and occupied >= shift.needed_count:
+        raise AdminWorkflowError(
+            "Die Schicht ist voll. Bitte auf Warteliste setzen oder Kapazität erhöhen."
+        )
+    assignment = ShiftAssignment(
+        volunteer=volunteer,
+        shift=shift,
+        assignment_status=status,
+        source=AssignmentSource.admin,
+        registered_at=utcnow(),
+        confirmed_at=utcnow() if status == AssignmentStatus.confirmed else None,
+    )
+    db.add(assignment)
+    db.flush()
+    record_audit(
+        db,
+        action="assignment.created",
+        entity_type="shift_assignment",
+        entity_id=assignment.id,
+        changes={
+            "status": status.value,
+            "conflict_overridden": bool(conflicts and override_conflict),
+        },
     )
     db.commit()
     return assignment

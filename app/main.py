@@ -33,6 +33,7 @@ from app.models import (
 from app.services.admin import (
     AdminWorkflowError,
     anonymize_volunteer,
+    assign_volunteer,
     change_assignment_status,
     promote_first_waitlisted,
     record_audit,
@@ -42,6 +43,7 @@ from app.services.checkins import (
     check_in_assignment,
     check_out_assignment,
 )
+from app.services.volunteers import deterministic_email_hash, normalize_email
 
 admin_dependency = Depends(require_permission("admin"))
 db_dependency = Depends(get_db)
@@ -588,6 +590,83 @@ def volunteer_list(
     )
 
 
+@app.get("/admin/ehrenamtliche/neu", tags=["admin"])
+def new_volunteer_form(
+    request: Request, db: Session = db_dependency, admin_user=admin_dependency
+):
+    return templates.TemplateResponse(
+        "admin_volunteer_form.html",
+        {
+            "request": request,
+            "events": list(db.scalars(select(Event).order_by(Event.name))),
+            "error": None,
+        },
+    )
+
+
+@app.post("/admin/ehrenamtliche/neu", tags=["admin"])
+def create_volunteer_admin(
+    request: Request,
+    db: Session = db_dependency,
+    admin_user=admin_dependency,
+    event_id: Annotated[int, Form()] = 0,
+    first_name: Annotated[str, Form()] = "",
+    last_name: Annotated[str, Form()] = "",
+    email: Annotated[str, Form()] = "",
+    phone: Annotated[str, Form()] = "",
+    age_group: Annotated[str, Form()] = AgeGroup.adult.value,
+):
+    event = db.get(Event, event_id)
+    error = None
+    if event is None:
+        error = "Bitte eine Veranstaltung auswählen."
+    elif not first_name.strip() or not last_name.strip() or "@" not in email:
+        error = "Vorname, Nachname und eine gültige E-Mail-Adresse sind erforderlich."
+    try:
+        parsed_age_group = AgeGroup(age_group)
+    except ValueError:
+        parsed_age_group = AgeGroup.adult
+        error = "Ungültige Altersgruppe."
+    normalized_email = normalize_email(email)
+    if event and db.scalar(
+        select(Volunteer).where(
+            Volunteer.event_id == event.id,
+            Volunteer.email_normalized == normalized_email,
+        )
+    ):
+        error = "Diese E-Mail-Adresse ist für die Veranstaltung bereits vorhanden."
+    if error:
+        return templates.TemplateResponse(
+            "admin_volunteer_form.html",
+            {
+                "request": request,
+                "events": list(db.scalars(select(Event).order_by(Event.name))),
+                "error": error,
+            },
+            status_code=422,
+        )
+    volunteer = Volunteer(
+        event=event,
+        first_name=first_name.strip(),
+        last_name=last_name.strip(),
+        email=email.strip(),
+        email_normalized=normalized_email,
+        email_hash=deterministic_email_hash(email),
+        phone=phone.strip() or None,
+        age_group=parsed_age_group,
+    )
+    db.add(volunteer)
+    db.flush()
+    record_audit(
+        db,
+        action="volunteer.created_by_admin",
+        entity_type="volunteer",
+        entity_id=volunteer.id,
+    )
+    db.commit()
+    return RedirectResponse(url=f"/admin/ehrenamtliche/{volunteer.id}", status_code=303)
+
+
 @app.get("/admin/ehrenamtliche/{volunteer_id}", tags=["admin"])
 def volunteer_detail(
     volunteer_id: int,
@@ -610,8 +689,52 @@ def volunteer_detail(
                 AssignmentStatus.no_show,
                 AssignmentStatus.attended,
             ],
+            "available_shifts": list(
+                db.scalars(
+                    select(Shift)
+                    .where(Shift.event_id == volunteer.event_id)
+                    .order_by(Shift.starts_at, Shift.title)
+                )
+            ),
         },
     )
+
+
+@app.post("/admin/ehrenamtliche/{volunteer_id}/zuteilungen", tags=["admin"])
+def create_assignment_admin(
+    volunteer_id: int,
+    db: Session = db_dependency,
+    admin_user=admin_dependency,
+    shift_id: Annotated[int, Form()] = 0,
+    status_value: Annotated[
+        str, Form(alias="status")
+    ] = AssignmentStatus.confirmed.value,
+    override_conflict: Annotated[bool, Form()] = False,
+):
+    volunteer = db.get(Volunteer, volunteer_id)
+    shift = db.get(Shift, shift_id)
+    if volunteer is None or shift is None:
+        raise HTTPException(status_code=404)
+    try:
+        parsed_status = AssignmentStatus(status_value)
+        if parsed_status not in {
+            AssignmentStatus.confirmed,
+            AssignmentStatus.waitlisted,
+            AssignmentStatus.pending,
+        }:
+            raise AdminWorkflowError(
+                "Dieser Status ist für neue Zuteilungen nicht zulässig."
+            )
+        assign_volunteer(
+            db,
+            volunteer,
+            shift,
+            status=parsed_status,
+            override_conflict=override_conflict,
+        )
+    except (ValueError, AdminWorkflowError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return RedirectResponse(url=f"/admin/ehrenamtliche/{volunteer.id}", status_code=303)
 
 
 @app.post("/admin/zuteilungen/{assignment_id}/status", tags=["admin"])
