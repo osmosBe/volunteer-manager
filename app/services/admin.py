@@ -180,6 +180,9 @@ def anonymize_volunteer(db: Session, volunteer: Volunteer) -> Volunteer:
     volunteer.email = marker
     volunteer.email_normalized = marker
     volunteer.email_hash = f"anonymized-{volunteer.id}"
+    volunteer.email_verified_at = None
+    volunteer.email_verification_token_hash = None
+    volunteer.email_verification_sent_at = None
     volunteer.phone = None
     volunteer.birth_date = None
     volunteer.birth_date_verified = False

@@ -1,12 +1,14 @@
+import re
 from datetime import datetime, timedelta, timezone
 
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
 from app.database.base import Base
 from app.database.session import create_database_engine, get_db
 from app.main import app
-from app.models import Event, EventStatus, Role, Shift, ShiftStatus, Team
+from app.models import Event, EventStatus, OutboxMessage, Role, Shift, ShiftStatus, Team
 
 
 def test_public_registration_and_cancellation_flow(tmp_path):
@@ -62,6 +64,7 @@ def test_public_registration_and_cancellation_flow(tmp_path):
         confirmation = client.get(confirmation_url)
         assert confirmation.status_code == 200
         assert "Infopoint" in confirmation.text
+        assert "Bitte bestätige deine E-Mail-Adresse" in confirmation.text
         assert "/zuteilungen/1/qr.svg" in confirmation.text
         qr_response = client.get(
             f"/anmeldung/{confirmation_url.split('/')[2]}/zuteilungen/1/qr.svg"
@@ -69,6 +72,24 @@ def test_public_registration_and_cancellation_flow(tmp_path):
         assert qr_response.status_code == 200
         assert qr_response.headers["content-type"].startswith("image/svg+xml")
         assert b"alex@example.org" not in qr_response.content
+        with Session() as db:
+            verification_message = db.scalar(
+                select(OutboxMessage).where(OutboxMessage.kind == "email_verification")
+            )
+            token_match = re.search(
+                r"email-bestaetigen/([A-Za-z0-9_-]+)", verification_message.body
+            )
+            assert token_match is not None
+        verified = client.get(f"/anmeldung/email-bestaetigen/{token_match.group(1)}")
+        assert verified.status_code == 200
+        assert "E-Mail-Adresse bestätigt" in verified.text
+        assert "Deine E-Mail-Adresse ist bestätigt" in client.get(confirmation_url).text
+        assert (
+            client.get(
+                f"/anmeldung/email-bestaetigen/{token_match.group(1)}"
+            ).status_code
+            == 404
+        )
         edit = client.get(f"/anmeldung/{confirmation_url.split('/')[2]}/bearbeiten")
         assert edit.status_code == 200
         assert "Alex" in edit.text

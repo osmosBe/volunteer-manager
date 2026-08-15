@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block content %}
+  <section class="mx-auto text-center py-5" style="max-width: 42rem">
+    <div class="display-4 mb-3" aria-hidden="true">✓</div>
+    <h1>E-Mail-Adresse bestätigt</h1>
+    <p class="lead">
+      Danke, {{ volunteer.first_name }}. Deine E-Mail-Adresse für
+      <strong>{{ volunteer.event.name }}</strong> ist jetzt verifiziert.
+    </p>
+    <a class="btn btn-primary" href="/">Zu den Veranstaltungen</a>
+  </section>
+{% endblock %}

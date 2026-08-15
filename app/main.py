@@ -1035,6 +1035,7 @@ def volunteer_list(
     query: str = "",
     event_id: int | None = None,
     assignment_status: str = "",
+    email_verified: str = "",
     u18: bool = False,
     db: Session = db_dependency,
     admin_user=admin_dependency,
@@ -1062,6 +1063,12 @@ def volunteer_list(
         statement = statement.join(ShiftAssignment).where(
             ShiftAssignment.assignment_status == parsed_status
         )
+    if email_verified == "verified":
+        statement = statement.where(Volunteer.email_verified_at.is_not(None))
+    elif email_verified == "pending":
+        statement = statement.where(Volunteer.email_verified_at.is_(None))
+    elif email_verified:
+        raise HTTPException(status_code=422, detail="Ungültiger E-Mail-Statusfilter")
     return templates.TemplateResponse(
         "admin_volunteer_list.html",
         {
@@ -1071,6 +1078,7 @@ def volunteer_list(
             "events": list(db.scalars(select(Event).order_by(Event.name))),
             "event_id": event_id,
             "assignment_status": assignment_status,
+            "email_verified": email_verified,
             "assignment_statuses": list(AssignmentStatus),
             "volunteer_statuses": list(VolunteerStatus),
             "briefings": list(db.scalars(select(Briefing).order_by(Briefing.title))),
