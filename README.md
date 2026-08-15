@@ -138,13 +138,16 @@ docker compose run --rm app alembic upgrade head
 
 For a manual operational migration, run `alembic upgrade head` against the persistent `/data/app.db` before deployment. The container performs the same idempotent pre-start check automatically.
 
-Create the default draft event idempotently after migrations:
+Create the complete fictional demo event idempotently after migrations:
 
 ```bash
 python -m scripts.seed_default_event
 ```
 
-The default seed creates `St. Pölten PRIDE 2026` with slug `pride-2026` only when there are no events.
+The seed creates `St. Pölten PRIDE 2026` with open demo shifts and 25 fictional
+volunteers under `example.invalid`. With a detached DEV volume, rerun this
+command after every Container App restart or revision change; the data is then
+intentionally non-persistent.
 
 ## Quality Checks
 

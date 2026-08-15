@@ -28,7 +28,7 @@ from app.models import (
     Volunteer,
     VolunteerStatus,
 )
-from app.services.seed import ensure_default_event
+from app.services.seed import ensure_default_event, ensure_demo_data
 from app.services.volunteers import deterministic_email_hash, normalize_email
 
 
@@ -127,6 +127,24 @@ def test_default_event_seed_is_idempotent(tmp_path):
         assert first.id == second.id
         assert db.query(Event).count() == 1
         assert first.slug == "pride-2026"
+
+
+def test_demo_seed_is_idempotent_and_uses_fictional_contacts(tmp_path):
+    engine = create_database_engine(f"sqlite:///{tmp_path / 'demo-seed.db'}")
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+
+    with Session() as db:
+        first = ensure_demo_data(db)
+        second = ensure_demo_data(db)
+
+        assert first.id == second.id
+        assert db.query(Team).filter(Team.event_id == first.id).count() == 7
+        assert db.query(Volunteer).filter(Volunteer.event_id == first.id).count() == 25
+        assert all(
+            volunteer.email.endswith("@example.invalid")
+            for volunteer in db.query(Volunteer).filter(Volunteer.event_id == first.id)
+        )
 
 
 def test_volunteer_can_be_created_without_birth_date(tmp_path):
