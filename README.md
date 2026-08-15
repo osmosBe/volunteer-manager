@@ -125,6 +125,13 @@ Azure Container App ingress must target port `8000`, which is the port exposed b
 Bei jedem Push nach `dev` baut die Pipeline die Commit-SHA als `APP_VERSION` in das
 Container-Image ein. Nach dem Deployment muss `/healthz` genau diese SHA im Feld
 `version` zurückliefern; so lässt sich die tatsächlich laufende Revision prüfen.
+Die Pipeline wartet auf genau diese Revision und prüft danach zusätzlich
+`/health/live` sowie den Datenbankstatus in `/health/ready`.
+
+Die gewünschte DEV-Topologie ist in `config/containerapp-dev.yaml` dokumentiert:
+Single-Revision-Modus, genau eine Replica, Ingress-Port 8000 und der registrierte
+Azure-Files-Speicher `volunteer-data-new` als `/data`. Werte in spitzen Klammern
+sind absichtliche Deployment-Platzhalter und keine Secrets.
 
 ## Project Structure
 
@@ -183,6 +190,32 @@ The seed creates `St. Pölten PRIDE 2026` with open demo shifts and 25 fictional
 volunteers under `example.invalid`. With a detached DEV volume, rerun this
 command after every Container App restart or revision change; the data is then
 intentionally non-persistent.
+
+### SQLite backup and restore
+
+Stop writes before copying the database. For a consistent online backup, use
+SQLite's backup command inside the container:
+
+```bash
+sqlite3 /data/app.db ".backup '/data/app-$(date +%Y%m%d-%H%M%S).backup'"
+sqlite3 /data/app.db "PRAGMA integrity_check;"
+```
+
+To restore, stop the application/revision that writes the database, keep the
+current file as a rollback copy, copy the selected backup to `/data/app.db`,
+start one replica, run `alembic upgrade head`, and verify `/health/ready`. Never
+restore while two revisions or processes can write the same SQLite file.
+
+## Known prototype limits
+
+- SQLite/Azure Files is restricted to one replica and one active revision.
+- DEV data is lost on restart while the `/data` volume remains detached.
+- The outbox does not send e-mail or SMS.
+- Easy Auth must be re-enabled and verified before shared use.
+- Bootstrap and HTMX currently load from public CDNs; production should
+  self-host these assets after a privacy review.
+
+See `DECISIONS.md` for architecture decisions and `DEMO.md` for the demo path.
 
 ## Quality Checks
 

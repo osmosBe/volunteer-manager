@@ -4,6 +4,7 @@ from io import StringIO
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -69,6 +70,42 @@ async def unauthenticated_handler(request: Request, exc: HTTPException):
 async def forbidden_handler(request: Request, exc: HTTPException):
     return templates.TemplateResponse(
         "forbidden.html", {"request": request}, status_code=status.HTTP_403_FORBIDDEN
+    )
+
+
+@app.exception_handler(status.HTTP_404_NOT_FOUND)
+async def not_found_handler(request: Request, exc: HTTPException):
+    return templates.TemplateResponse(
+        "error.html",
+        {
+            "request": request,
+            "title": "Nicht gefunden",
+            "message": "Die angeforderte Seite oder der Link ist nicht verfügbar.",
+        },
+        status_code=status.HTTP_404_NOT_FOUND,
+    )
+
+
+@app.exception_handler(status.HTTP_422_UNPROCESSABLE_ENTITY)
+async def unprocessable_handler(request: Request, exc: HTTPException):
+    detail = exc.detail if isinstance(exc.detail, str) else "Eingabe nicht gültig."
+    return templates.TemplateResponse(
+        "error.html",
+        {"request": request, "title": "Eingabe prüfen", "message": detail},
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_handler(request: Request, exc: RequestValidationError):
+    return templates.TemplateResponse(
+        "error.html",
+        {
+            "request": request,
+            "title": "Eingabe prüfen",
+            "message": "Mindestens ein Feld fehlt oder enthält einen ungültigen Wert.",
+        },
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
     )
 
 
@@ -994,23 +1031,31 @@ def admin_database_status(
     admin_user=admin_dependency,
     db: Session = db_dependency,
 ):
-    inspector = inspect(db.bind)
     migration_revision = None
-    if inspector.has_table("alembic_version"):
-        migration_revision = db.execute(
-            text("SELECT version_num FROM alembic_version LIMIT 1")
-        ).scalar_one_or_none()
+    try:
+        inspector = inspect(db.bind)
+        if inspector.has_table("alembic_version"):
+            migration_revision = db.execute(
+                text("SELECT version_num FROM alembic_version LIMIT 1")
+            ).scalar_one_or_none()
+        status_data = database_status(db)
+        event_count = db.scalar(select(func.count(Event.id))) or 0
+        volunteer_count = db.scalar(select(func.count(Volunteer.id))) or 0
+        shift_count = db.scalar(select(func.count(Shift.id))) or 0
+    except SQLAlchemyError:
+        status_data = {"connected": False, "error": "database_unavailable"}
+        event_count = volunteer_count = shift_count = 0
 
     return templates.TemplateResponse(
         "admin_db.html",
         {
             "request": request,
             "admin_user": admin_user,
-            "status": database_status(db),
+            "status": status_data,
             "migration_revision": migration_revision,
-            "event_count": db.scalar(select(func.count(Event.id))) or 0,
-            "volunteer_count": db.scalar(select(func.count(Volunteer.id))) or 0,
-            "shift_count": db.scalar(select(func.count(Shift.id))) or 0,
+            "event_count": event_count,
+            "volunteer_count": volunteer_count,
+            "shift_count": shift_count,
         },
     )
 
