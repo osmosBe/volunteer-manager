@@ -1,8 +1,10 @@
+import csv
 from datetime import datetime
+from io import StringIO
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, status
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, inspect, select, text
@@ -183,6 +185,72 @@ def volunteer_list(
     return templates.TemplateResponse(
         "admin_volunteer_list.html",
         {"request": request, "volunteers": list(db.scalars(statement)), "query": query},
+    )
+
+
+def csv_download(
+    filename: str, header: list[str], rows: list[list[str]]
+) -> StreamingResponse:
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(header)
+    writer.writerows(rows)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get("/admin/export/veranstaltungen/{event_id}/kontakte.csv", tags=["admin"])
+def export_event_contacts(
+    event_id: int, db: Session = db_dependency, admin_user=admin_dependency
+):
+    event = db.get(Event, event_id)
+    if event is None:
+        raise HTTPException(status_code=404)
+    volunteers = list(
+        db.scalars(
+            select(Volunteer)
+            .where(Volunteer.event_id == event_id)
+            .order_by(Volunteer.last_name, Volunteer.first_name)
+        )
+    )
+    return csv_download(
+        f"{event.slug}-kontakte.csv",
+        ["Vorname", "Nachname", "E-Mail", "Telefonnummer"],
+        [[v.first_name, v.last_name, v.email, v.phone or ""] for v in volunteers],
+    )
+
+
+@app.get("/admin/export/veranstaltungen/{event_id}/schichten.csv", tags=["admin"])
+def export_event_assignments(
+    event_id: int, db: Session = db_dependency, admin_user=admin_dependency
+):
+    event = db.get(Event, event_id)
+    if event is None:
+        raise HTTPException(status_code=404)
+    assignments = list(
+        db.scalars(
+            select(ShiftAssignment)
+            .join(Shift)
+            .where(Shift.event_id == event_id)
+            .order_by(ShiftAssignment.shift_id)
+        )
+    )
+    return csv_download(
+        f"{event.slug}-schichten.csv",
+        ["Schicht", "Beginn", "Vorname", "Nachname", "Status"],
+        [
+            [
+                a.shift.title,
+                a.shift.starts_at.isoformat(),
+                a.volunteer.first_name,
+                a.volunteer.last_name,
+                a.assignment_status.value,
+            ]
+            for a in assignments
+        ],
     )
 
 
