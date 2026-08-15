@@ -40,7 +40,7 @@ def test_postgresql_models_accept_nullable_event_and_birth_date():
             slug=f"postgres-{suffix}",
             starts_at=None,
             ends_at=None,
-            status=EventStatus.draft,
+            status=EventStatus.registration_open,
         )
         email = f"postgres-{suffix}@example.invalid"
         volunteer = Volunteer(
@@ -61,6 +61,7 @@ def test_postgresql_models_accept_nullable_event_and_birth_date():
         assert volunteer.id is not None
         assert event.starts_at is None
         assert event.ends_at is None
+        assert event.status == EventStatus.registration_open
         assert volunteer.birth_date is None
 
         db.rollback()

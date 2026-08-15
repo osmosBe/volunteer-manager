@@ -129,7 +129,7 @@ def test_database_diagnostics_handles_uninitialized_schema(tmp_path):
         "database_reachable": True,
         "schema_initialized": False,
         "current_revision": None,
-        "expected_revision": "20260815_0008",
+        "expected_revision": "20260815_0009",
         "migration_pending": True,
         "tables": {"events": False, "volunteers": False, "shifts": False},
         "diagnostic_error": None,
