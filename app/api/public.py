@@ -10,11 +10,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.database.session import get_db
-from app.models import Event, EventStatus, OutboxMessage, Shift, ShiftStatus
+from app.models import Event, EventStatus, Shift, ShiftStatus
 from app.services.mail_delivery import (
-    MailDeliveryError,
-    get_smtp_configuration,
-    send_outbox_message,
+    send_pending_automatic_messages,
 )
 from app.services.qr_codes import qr_svg
 from app.services.registrations import (
@@ -31,34 +29,6 @@ from app.services.registrations import (
 router = APIRouter(tags=["public"])
 templates = Jinja2Templates(directory="app/templates")
 DatabaseSession = Annotated[Session, Depends(get_db)]
-
-
-def send_pending_email_verification(db: Session, volunteer_id: int) -> None:
-    """Deliver a queued verification when SMTP is enabled.
-
-    Registration must remain available when the mail server is temporarily down.
-    The adapter records the delivery error on the outbox message for admins.
-    """
-    configuration = get_smtp_configuration(db)
-    if configuration is None or not configuration.enabled:
-        return
-    message = db.scalar(
-        select(OutboxMessage)
-        .where(
-            OutboxMessage.volunteer_id == volunteer_id,
-            OutboxMessage.kind == "email_verification",
-            OutboxMessage.sent_at.is_(None),
-        )
-        .order_by(OutboxMessage.id.desc())
-        .limit(1)
-    )
-    if message is None:
-        return
-    try:
-        send_outbox_message(db, message)
-    except MailDeliveryError:
-        # The failed message remains visible in the admin outbox for retry.
-        return
 
 
 def public_events(db: Session) -> list[Event]:
@@ -243,7 +213,7 @@ def submit_registration(
             },
             status_code=422,
         )
-    send_pending_email_verification(db, result.volunteer.id)
+    send_pending_automatic_messages(db, result.volunteer.id)
     return RedirectResponse(
         url=f"/anmeldung/{result.edit_token}/bestaetigung", status_code=303
     )
@@ -378,7 +348,7 @@ def submit_registration_edit(
             },
             status_code=422,
         )
-    send_pending_email_verification(db, volunteer.id)
+    send_pending_automatic_messages(db, volunteer.id)
     return RedirectResponse(url=f"/anmeldung/{token}/bestaetigung", status_code=303)
 
 
@@ -391,4 +361,5 @@ def cancel_registration_assignment(token: str, assignment_id: int, db: DatabaseS
         cancel_assignment(db, volunteer, assignment_id)
     except RegistrationError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    send_pending_automatic_messages(db, volunteer.id)
     return RedirectResponse(url=f"/anmeldung/{token}/bestaetigung", status_code=303)

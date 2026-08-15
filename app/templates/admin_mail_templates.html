@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h1>Mailvorlagen & Versandregeln</h1>
+    <a href="/admin/outbox">Zur Outbox</a>
+  </div>
+  <p class="alert alert-info">
+    <strong>Automatisch</strong> sendet nach dem fachlichen Ereignis, sofern SMTP aktiv ist.
+    <strong>Manuell</strong> legt nur eine Outbox-Nachricht an.
+    <strong>Deaktiviert</strong> erzeugt für dieses Ereignis keine Nachricht.
+    Fehlgeschlagener automatischer Versand bleibt in der Outbox und verändert den fachlichen Vorgang nicht.
+  </p>
+  <p class="small text-muted">Verfügbare Platzhalter: <code>{first_name}</code>, <code>{last_name}</code>, <code>{event_name}</code>, <code>{verification_url}</code>, <code>{edit_url}</code>, <code>{shift_title}</code>, <code>{reason}</code>, <code>{contact_email}</code>.</p>
+  {% for template in mail_templates %}
+    <form class="card card-body mb-3" method="post" action="/admin/einstellungen/mail-templates/{{ template.key }}">
+      <div class="d-flex flex-wrap justify-content-between gap-2">
+        <div><h2 class="h5 mb-1">{{ template.name }}</h2><p class="text-muted">{{ template.trigger_description }}</p></div>
+        <code>{{ template.key }}</code>
+      </div>
+      <div class="row g-3">
+        <div class="col-md-8"><label class="form-label">Betreff<input class="form-control" required name="subject_template" value="{{ template.subject_template }}"></label></div>
+        <div class="col-md-4"><label class="form-label">Versandmodus<select class="form-select" name="delivery_mode">{% for mode in delivery_modes %}<option value="{{ mode }}" {% if template.delivery_mode == mode %}selected{% endif %}>{{ {'automatic':'automatisch','manual':'manuell','disabled':'deaktiviert'}[mode] }}</option>{% endfor %}</select></label></div>
+        <div class="col-12"><label class="form-label">Text<textarea class="form-control" rows="8" required name="body_template">{{ template.body_template }}</textarea></label></div>
+      </div>
+      <button class="btn btn-primary align-self-start">Vorlage speichern</button>
+    </form>
+  {% endfor %}
+{% endblock %}

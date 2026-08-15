@@ -34,6 +34,8 @@ gespeichert und bestätigt die E-Mail-Adresse über
 geänderte Adresse setzt den Status zurück und erzeugt einen neuen
 Bestätigungslink. Der Bestätigungsstatus ist in der Admin-Personenliste sichtbar
 und filterbar.
+Der fachliche Personen- und Schichtstatus bleibt bei einer E-Mail-Änderung
+unverändert; nur die neue Adresse verliert folgerichtig die E-Mail-Verifikation.
 
 Die öffentliche Veranstaltungsseite ist im Adminbereich mit Kurz- und
 Langbeschreibung, Ort, Adresse, Treffpunkt, Anmeldezeitraum, Kontakt,
@@ -93,8 +95,8 @@ Check-ins bleiben bewusst eine individuelle Vor-Ort-Aktion.
 Die Detailansicht erlaubt Statusänderungen und eine explizit bestätigte,
 irreversible Anonymisierung, bei der historische Einsatzstatistiken erhalten
 bleiben. Admin-Änderungen werden im vorhandenen Audit-Log protokolliert. Unter
-`/admin/outbox` sind gespeicherte, ausdrücklich nicht versendete Nachrichten
-einsehbar. Briefings sowie druckfreundliche Schicht- und Check-in-Listen werden
+`/admin/outbox` sind gespeicherte Nachrichten samt Versandmodus, Fehler und
+Versandzeit einsehbar. Briefings sowie druckfreundliche Schicht- und Check-in-Listen werden
 über die jeweilige Veranstaltungsansicht verwaltet bzw. geöffnet.
 
 E-Mail-Adressen werden serverseitig nach gängigen Syntaxregeln validiert;
@@ -108,6 +110,16 @@ bleibt die Anmeldung trotzdem erhalten und die Nachricht kann im Adminbereich
 erneut versendet werden. Andere Outbox-Nachrichten werden erst nach einem
 ausdrücklichen Admin-Klick versendet; Fehler- und Versandstatus bleiben
 nachvollziehbar.
+
+Unter `/admin/einstellungen/mail-templates` sind Betreff, Klartextinhalt und
+Versandmodus pro Ereignis administrierbar. Die Modi sind `automatic` (nach dem
+fachlichen Vorgang sofort versuchen), `manual` (nur Outbox) und `disabled`
+(keine Nachricht anlegen). Unterstützt werden Erstanmeldung, geänderte
+E-Mail-Adresse, Anmeldungsänderung, Schichtstorno, Ablehnung und manuelles
+Nachrücken von der Warteliste. Die Outbox zeigt Auslöser und Modus transparent.
+Eine Ablehnung benötigt eine Begründung und explizite Bestätigung, setzt die
+Person und ihre offenen/aktiven Zuteilungen auf abgelehnt, sperrt den öffentlichen
+Bearbeitungslink und erzeugt abhängig von der Mailflow-Regel eine Nachricht.
 
 ## Technology Stack
 

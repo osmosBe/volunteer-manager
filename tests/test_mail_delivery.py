@@ -1,7 +1,6 @@
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
 
-from app.api.public import send_pending_email_verification
 from app.config.settings import get_settings
 from app.database.base import Base
 from app.database.session import create_database_engine, get_db
@@ -10,11 +9,16 @@ from app.models import (
     AgeGroup,
     Event,
     EventStatus,
+    MailTemplate,
     OutboxMessage,
     SMTPConfiguration,
     Volunteer,
 )
-from app.services.mail_delivery import send_outbox_message
+from app.services.mail_delivery import (
+    send_outbox_message,
+    send_pending_automatic_messages,
+)
+from app.services.mail_templates import queue_templated_mail
 from app.services.volunteers import deterministic_email_hash
 
 
@@ -163,10 +167,48 @@ def test_enabled_smtp_automatically_sends_pending_verification(monkeypatch, tmp_
         message.kind = "email_verification"
         db.commit()
 
-        send_pending_email_verification(db, message.volunteer_id)
+        message.delivery_mode = "automatic"
+        db.commit()
+        send_pending_automatic_messages(db, message.volunteer_id)
 
         db.refresh(message)
         assert message.sent_at is not None
         assert len(FakeSMTP.sent_messages) == 1
     monkeypatch.delenv("SMTP_PASSWORD")
     get_settings.cache_clear()
+
+
+def test_admin_can_edit_template_and_disable_an_outbox_flow(tmp_path):
+    Session = build_mail_database(tmp_path)
+
+    def override_get_db():
+        with Session() as db:
+            yield db
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        client = TestClient(app)
+        page = client.get("/admin/einstellungen/mail-templates")
+        assert page.status_code == 200
+        assert "Mailvorlagen" in page.text
+        assert "Nach einer öffentlichen Anmeldung" in page.text
+        response = client.post(
+            "/admin/einstellungen/mail-templates/registration_updated",
+            data={
+                "subject_template": "Update für {event_name}",
+                "body_template": "Hallo {first_name}, das ist der neue Text.",
+                "delivery_mode": "disabled",
+            },
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        with Session() as db:
+            template = (
+                db.query(MailTemplate).filter_by(key="registration_updated").one()
+            )
+            assert template.delivery_mode == "disabled"
+            message = add_message(db)
+            volunteer = db.get(Volunteer, message.volunteer_id)
+            assert queue_templated_mail(db, volunteer, "registration_updated") is None
+    finally:
+        app.dependency_overrides.clear()

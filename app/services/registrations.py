@@ -31,6 +31,7 @@ from app.models import (
 )
 from app.models.core import utcnow
 from app.services.email_addresses import EmailAddressError, validate_email_address
+from app.services.mail_templates import queue_templated_mail
 from app.services.volunteers import deterministic_email_hash
 
 
@@ -310,23 +311,17 @@ def create_registration(
         for shift in shifts
     )
     db.add_all(assignments)
-    db.add(
-        OutboxMessage(
-            volunteer_id=volunteer.id,
-            kind="email_verification",
-            subject=f"E-Mail für {event.name} bestätigen",
-            body=(
-                f"Hallo {volunteer.first_name},\n\n"
-                f"deine Anmeldung für {event.name} wurde erfasst. "
-                "Bitte bestätige deine E-Mail-Adresse über diesen Link:\n"
-                f"{get_settings().app_base_url.rstrip('/')}/anmeldung/"
-                f"email-bestaetigen/{verification_token}\n\n"
-                "Dein persönlicher Bearbeitungslink:\n"
-                f"{get_settings().app_base_url.rstrip('/')}/anmeldung/"
-                f"{edit_token}/bestaetigung\n\nST. PRIDE"
+    base_url = get_settings().app_base_url.rstrip("/")
+    queue_templated_mail(
+        db,
+        volunteer,
+        "email_verification",
+        {
+            "verification_url": (
+                f"{base_url}/anmeldung/email-bestaetigen/{verification_token}"
             ),
-            recipient_email=email,
-        )
+            "edit_url": f"{base_url}/anmeldung/{edit_token}/bestaetigung",
+        },
     )
     db.commit()
     db.refresh(volunteer)
@@ -430,30 +425,31 @@ def update_registration(
     volunteer.age_group = age_group
     volunteer.contact_consent = True
     volunteer.future_contact_consent = data.future_contact_consent
-    db.add(
-        OutboxMessage(
-            volunteer_id=volunteer.id,
-            kind="registration_updated",
-            subject="Deine Anmeldung wurde aktualisiert",
-            body="Deine Kontaktdaten oder Schichten wurden aktualisiert.",
-            recipient_email=email,
-        )
-    )
+    queue_templated_mail(db, volunteer, "registration_updated")
     if email != previous_email:
-        verification_token = issue_email_verification_token(volunteer)
-        db.add(
-            OutboxMessage(
-                volunteer_id=volunteer.id,
-                kind="email_verification",
-                subject="Neue E-Mail-Adresse bestätigen",
-                body=(
-                    f"Hallo {volunteer.first_name},\n\n"
-                    "bitte bestätige deine neue E-Mail-Adresse über diesen Link:\n"
-                    f"{get_settings().app_base_url.rstrip('/')}/anmeldung/"
-                    f"email-bestaetigen/{verification_token}\n\nST. PRIDE"
+        pending_verifications = db.scalars(
+            select(OutboxMessage).where(
+                OutboxMessage.volunteer_id == volunteer.id,
+                OutboxMessage.kind.in_(
+                    ["email_verification", "email_changed_verification"]
                 ),
-                recipient_email=email,
+                OutboxMessage.sent_at.is_(None),
             )
+        )
+        for pending in pending_verifications:
+            pending.delivery_mode = "disabled"
+            pending.last_error = "durch E-Mail-Änderung ersetzt"
+        verification_token = issue_email_verification_token(volunteer)
+        queue_templated_mail(
+            db,
+            volunteer,
+            "email_changed_verification",
+            {
+                "verification_url": (
+                    f"{get_settings().app_base_url.rstrip('/')}/anmeldung/"
+                    f"email-bestaetigen/{verification_token}"
+                )
+            },
         )
     db.commit()
     db.refresh(volunteer)
@@ -471,13 +467,10 @@ def cancel_assignment(db: Session, volunteer: Volunteer, assignment_id: int) -> 
         raise RegistrationError("Die ausgewählte Anmeldung wurde nicht gefunden.")
     assignment.assignment_status = AssignmentStatus.cancelled
     assignment.cancelled_at = utcnow()
-    db.add(
-        OutboxMessage(
-            volunteer_id=volunteer.id,
-            kind="registration_cancellation",
-            subject="Deine Schicht wurde storniert",
-            body="Eine deiner Schichten wurde storniert.",
-            recipient_email=volunteer.email,
-        )
+    queue_templated_mail(
+        db,
+        volunteer,
+        "registration_cancellation",
+        {"shift_title": assignment.shift.title},
     )
     db.commit()

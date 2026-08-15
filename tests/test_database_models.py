@@ -111,6 +111,7 @@ def test_initial_migration_creates_tables(tmp_path):
         "team_materials",
         "checkin_materials",
         "smtp_configurations",
+        "mail_templates",
         "roles",
         "checkins",
         "briefings",

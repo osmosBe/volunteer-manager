@@ -10,12 +10,14 @@ from app.models import (
     AssignmentSource,
     AssignmentStatus,
     AuditLog,
+    OutboxMessage,
     Shift,
     ShiftAssignment,
     Volunteer,
     VolunteerStatus,
 )
 from app.models.core import utcnow
+from app.services.mail_templates import queue_templated_mail
 
 
 class AdminWorkflowError(ValueError):
@@ -166,7 +168,50 @@ def promote_first_waitlisted(db: Session, shift: Shift) -> ShiftAssignment:
     )
     if assignment is None:
         raise AdminWorkflowError("Für diese Schicht gibt es keine Warteliste.")
-    return change_assignment_status(db, assignment, AssignmentStatus.confirmed)
+    change_assignment_status(db, assignment, AssignmentStatus.confirmed)
+    queue_templated_mail(
+        db,
+        assignment.volunteer,
+        "waitlist_promoted",
+        {"shift_title": shift.title},
+    )
+    db.commit()
+    return assignment
+
+
+def reject_volunteer(
+    db: Session, volunteer: Volunteer, reason: str
+) -> OutboxMessage | None:
+    clean_reason = reason.strip()
+    if not clean_reason:
+        raise AdminWorkflowError("Für eine Ablehnung ist eine Begründung erforderlich.")
+    previous_status = volunteer.status
+    volunteer.status = VolunteerStatus.rejected
+    volunteer.edit_token_revoked_at = utcnow()
+    for assignment in volunteer.assignments:
+        if assignment.assignment_status not in {
+            AssignmentStatus.cancelled,
+            AssignmentStatus.rejected,
+            AssignmentStatus.attended,
+            AssignmentStatus.no_show,
+        }:
+            assignment.assignment_status = AssignmentStatus.rejected
+            assignment.cancelled_at = utcnow()
+    message = queue_templated_mail(
+        db,
+        volunteer,
+        "registration_rejected",
+        {"reason": clean_reason},
+    )
+    record_audit(
+        db,
+        action="volunteer.rejected",
+        entity_type="volunteer",
+        entity_id=volunteer.id,
+        changes={"from": previous_status.value, "reason": clean_reason},
+    )
+    db.commit()
+    return message
 
 
 def anonymize_volunteer(db: Session, volunteer: Volunteer) -> Volunteer:
