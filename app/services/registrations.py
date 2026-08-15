@@ -216,6 +216,8 @@ def validate_participant_age(
 ) -> AgeGroup:
     if birth_date is None:
         raise RegistrationError("Bitte gib dein Geburtsdatum an.")
+    if birth_date > utcnow().date():
+        raise RegistrationError("Das Geburtsdatum darf nicht in der Zukunft liegen.")
     reference_date = event.starts_at.date() if event.starts_at else utcnow().date()
     age = age_on_date(birth_date, reference_date)
     if age < 0:
