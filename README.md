@@ -30,7 +30,9 @@ Der aktuelle Stand ist nicht als öffentliches Produktivsystem freigegeben.
 Der Adminbereich unter `/admin` zeigt Veranstaltungen an und erlaubt derzeit das
 Anlegen, Bearbeiten, Duplizieren und Archivieren. In der Veranstaltungsansicht
 können Bereiche, Aufgaben und Schichten angelegt sowie Status und Kapazitäten
-direkt gepflegt werden. Die erste wartende Person kann kontrolliert nachrücken.
+direkt gepflegt werden. Pro Arbeitsbereich lassen sich strukturierte Materialien
+mit Bedarf, verfügbarem Bestand, Einheit, Notiz und Verbrauchskennzeichnung
+anlegen und aktualisieren. Die erste wartende Person kann kontrolliert nachrücken.
 Zusätzlich stehen
 `/health/live` (Prozess-Liveness) und `/health/ready` (inklusive Datenbankzugriff)
 für Container-Orchestrierung zur Verfügung.

@@ -25,6 +25,7 @@ from app.models import (
     EventStatus,
     ShiftStatus,
     Team,
+    TeamMaterial,
     Volunteer,
     VolunteerStatus,
 )
@@ -107,6 +108,7 @@ def test_initial_migration_creates_tables(tmp_path):
         "file_records",
         "audit_logs",
         "teams",
+        "team_materials",
         "roles",
         "checkins",
         "briefings",
@@ -140,6 +142,7 @@ def test_demo_seed_is_idempotent_and_uses_fictional_contacts(tmp_path):
 
         assert first.id == second.id
         assert db.query(Team).filter(Team.event_id == first.id).count() == 7
+        assert db.query(TeamMaterial).count() == 11
         assert db.query(Volunteer).filter(Volunteer.event_id == first.id).count() == 25
         assert all(
             volunteer.email.endswith("@example.invalid")

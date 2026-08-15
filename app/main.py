@@ -29,6 +29,7 @@ from app.models import (
     ShiftAssignment,
     ShiftStatus,
     Team,
+    TeamMaterial,
     Volunteer,
 )
 from app.services.admin import (
@@ -457,6 +458,93 @@ def create_role(
     db.commit()
     return RedirectResponse(
         url=f"/admin/veranstaltungen/{team.event_id}", status_code=303
+    )
+
+
+@app.post("/admin/bereiche/{team_id}/materialien", tags=["admin"])
+def create_team_material(
+    team_id: int,
+    db: Session = db_dependency,
+    admin_user=admin_dependency,
+    name: Annotated[str, Form()] = "",
+    quantity_required: Annotated[int, Form()] = 1,
+    quantity_available: Annotated[int, Form()] = 0,
+    unit: Annotated[str, Form()] = "Stück",
+    notes: Annotated[str, Form()] = "",
+    is_consumable: Annotated[bool, Form()] = False,
+):
+    team = db.get(Team, team_id)
+    if team is None:
+        raise HTTPException(status_code=404)
+    if not name.strip():
+        raise HTTPException(status_code=422, detail="Materialname ist erforderlich")
+    if quantity_required < 0 or quantity_available < 0:
+        raise HTTPException(status_code=422, detail="Mengen dürfen nicht negativ sein")
+    if db.scalar(
+        select(TeamMaterial).where(
+            TeamMaterial.team_id == team.id, TeamMaterial.name == name.strip()
+        )
+    ):
+        raise HTTPException(
+            status_code=422, detail="Dieses Material ist im Bereich bereits vorhanden"
+        )
+    material = TeamMaterial(
+        team=team,
+        name=name.strip(),
+        quantity_required=quantity_required,
+        quantity_available=quantity_available,
+        unit=unit.strip() or "Stück",
+        notes=notes.strip() or None,
+        is_consumable=is_consumable,
+    )
+    db.add(material)
+    db.flush()
+    record_audit(
+        db,
+        action="team_material.created",
+        entity_type="team_material",
+        entity_id=material.id,
+        changes={"team_id": team.id, "name": material.name},
+    )
+    db.commit()
+    return RedirectResponse(
+        url=f"/admin/veranstaltungen/{team.event_id}", status_code=303
+    )
+
+
+@app.post("/admin/materialien/{material_id}", tags=["admin"])
+def update_team_material(
+    material_id: int,
+    db: Session = db_dependency,
+    admin_user=admin_dependency,
+    quantity_required: Annotated[int, Form()] = 1,
+    quantity_available: Annotated[int, Form()] = 0,
+    notes: Annotated[str, Form()] = "",
+    is_active: Annotated[bool, Form()] = False,
+):
+    material = db.get(TeamMaterial, material_id)
+    if material is None:
+        raise HTTPException(status_code=404)
+    if quantity_required < 0 or quantity_available < 0:
+        raise HTTPException(status_code=422, detail="Mengen dürfen nicht negativ sein")
+    material.quantity_required = quantity_required
+    material.quantity_available = quantity_available
+    material.notes = notes.strip() or None
+    material.is_active = is_active
+    record_audit(
+        db,
+        action="team_material.updated",
+        entity_type="team_material",
+        entity_id=material.id,
+        changes={
+            "required": quantity_required,
+            "available": quantity_available,
+            "active": is_active,
+        },
+    )
+    db.commit()
+    return RedirectResponse(
+        url=f"/admin/veranstaltungen/{material.team.event_id}", status_code=303
     )
 
 

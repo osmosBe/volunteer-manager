@@ -198,6 +198,28 @@ class Team(TimestampMixin, Base):
     roles: Mapped[list["Role"]] = relationship(
         back_populates="team", cascade="all, delete-orphan"
     )
+    materials: Mapped[list["TeamMaterial"]] = relationship(
+        back_populates="team", cascade="all, delete-orphan"
+    )
+
+
+class TeamMaterial(TimestampMixin, Base):
+    __tablename__ = "team_materials"
+    __table_args__ = (
+        UniqueConstraint("team_id", "name", name="uq_team_material_name"),
+    )
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    team_id: Mapped[int] = mapped_column(
+        ForeignKey("teams.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    quantity_required: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    quantity_available: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    unit: Mapped[str] = mapped_column(String(40), default="Stück", nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text)
+    is_consumable: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    team: Mapped[Team] = relationship(back_populates="materials")
 
 
 class Role(TimestampMixin, Base):

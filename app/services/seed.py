@@ -13,6 +13,7 @@ from app.models import (
     ShiftAssignment,
     ShiftStatus,
     Team,
+    TeamMaterial,
     Volunteer,
     VolunteerStatus,
 )
@@ -97,6 +98,27 @@ def ensure_demo_data(db: Session) -> Event:
         teams[name] = team
         db.add(team)
     db.flush()
+
+    material_specs = {
+        "Aufbau": [("Warnwesten", 10), ("Arbeitshandschuhe", 10)],
+        "Parade": [("Funkgeräte", 8), ("Lanyards", 44)],
+        "Platz": [("Zutrittsbändchen", 30), ("Solibänder", 500)],
+        "Backstage": [("Funkgeräte", 4)],
+        "Clubbing": [("Werkzeugkiste", 1)],
+        "Abbau": [("Arbeitshandschuhe", 12)],
+        "Organisation": [("Erste-Hilfe-Set", 2), ("Funkgeräte", 5)],
+    }
+    for team_name, materials in material_specs.items():
+        for material_name, quantity in materials:
+            db.add(
+                TeamMaterial(
+                    team=teams[team_name],
+                    name=material_name,
+                    quantity_required=quantity,
+                    quantity_available=max(0, quantity - 1),
+                    notes="Fiktiver Demo-Bestand",
+                )
+            )
 
     shifts: list[Shift] = []
     for _index, (team_name, role_name, capacity, waitlist_capacity) in enumerate(
