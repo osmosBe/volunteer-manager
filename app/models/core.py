@@ -458,9 +458,27 @@ class OutboxMessage(Base):
     kind: Mapped[str] = mapped_column(String(60), nullable=False)
     subject: Mapped[str] = mapped_column(String(255), nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
+    recipient_email: Mapped[str | None] = mapped_column(String(255))
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error: Mapped[str | None] = mapped_column(String(500))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
     )
+
+
+class SMTPConfiguration(TimestampMixin, Base):
+    __tablename__ = "smtp_configurations"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    host: Mapped[str] = mapped_column(String(255), nullable=False)
+    port: Mapped[int] = mapped_column(Integer, default=587, nullable=False)
+    username: Mapped[str | None] = mapped_column(String(255))
+    from_email: Mapped[str] = mapped_column(String(255), nullable=False)
+    from_name: Mapped[str] = mapped_column(
+        String(255), default="ST. PRIDE Volunteer Management", nullable=False
+    )
+    use_starttls: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    use_ssl: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
 
 class VolunteerCustomField(TimestampMixin, Base):

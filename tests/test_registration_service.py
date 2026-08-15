@@ -119,6 +119,17 @@ def test_registration_rejects_overlapping_shifts(db):
         create_registration(db, event, registration_data(), [first.id, second.id])
 
 
+def test_registration_rejects_invalid_email_but_allows_safe_demo_domain(db):
+    event, first, _ = make_event_and_shifts(db)
+    with pytest.raises(RegistrationError, match="gültige E-Mail-Adresse"):
+        create_registration(db, event, registration_data("not-an-email"), [first.id])
+
+    result = create_registration(
+        db, event, registration_data("demo-person@example.invalid"), [first.id]
+    )
+    assert result.volunteer.email == "demo-person@example.invalid"
+
+
 def test_cancelling_assignment_keeps_history_and_frees_capacity(db):
     event, first, _ = make_event_and_shifts(db, needed_count=1)
     result = create_registration(db, event, registration_data(), [first.id])

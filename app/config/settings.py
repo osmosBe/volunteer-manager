@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Annotated, Any, Literal
 
-from pydantic import BeforeValidator, Field
+from pydantic import BeforeValidator, Field, SecretStr
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     permissions_config_path: str = "config/permissions.yaml"
     admin_allowed_emails: EmailCsvList = Field(default_factory=list)
     admin_allowed_group_ids: CsvList = Field(default_factory=list)
+    smtp_password: SecretStr | None = None
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
