@@ -126,7 +126,7 @@ Invoke-Native gh api --method PUT "repos/$repository/environments/$encodedEnviro
 Write-Host "GitHub environment '$EnvironmentName' exists."
 
 $existingVariables = @{}
-$variableRows = Invoke-Native gh variable list --repo $repository --env $EnvironmentName --json name,value
+$variableRows = Invoke-Native gh variable list --repo $repository --env $EnvironmentName --json "name,value"
 foreach ($row in (($variableRows | Out-String) | ConvertFrom-Json)) {
     $existingVariables[$row.name] = $row.value
 }
