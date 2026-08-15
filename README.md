@@ -28,7 +28,10 @@ für die lokale bzw. ausdrücklich freigegebene Prototyp-Entwicklung gedacht.
 Der aktuelle Stand ist nicht als öffentliches Produktivsystem freigegeben.
 
 Der Adminbereich unter `/admin` zeigt Veranstaltungen an und erlaubt derzeit das
-Anlegen neuer Entwürfe über `/admin/veranstaltungen/neu`. Zusätzlich stehen
+Anlegen, Bearbeiten, Duplizieren und Archivieren. In der Veranstaltungsansicht
+können Bereiche, Aufgaben und Schichten angelegt sowie Status und Kapazitäten
+direkt gepflegt werden. Die erste wartende Person kann kontrolliert nachrücken.
+Zusätzlich stehen
 `/health/live` (Prozess-Liveness) und `/health/ready` (inklusive Datenbankzugriff)
 für Container-Orchestrierung zur Verfügung.
 
@@ -40,6 +43,14 @@ CSV-Exporte sind zweckgebunden pro Veranstaltung verfügbar: Kontaktliste unter
 `/admin/export/veranstaltungen/<id>/kontakte.csv` und Schichtbelegung unter
 `/admin/export/veranstaltungen/<id>/schichten.csv`. Sensible Freitexte werden
 nicht exportiert.
+
+Die Personenliste bietet Veranstaltungs-, Zuteilungsstatus- und U18-Filter. Die
+Detailansicht erlaubt Statusänderungen und eine explizit bestätigte,
+irreversible Anonymisierung, bei der historische Einsatzstatistiken erhalten
+bleiben. Admin-Änderungen werden im vorhandenen Audit-Log protokolliert. Unter
+`/admin/outbox` sind gespeicherte, ausdrücklich nicht versendete Nachrichten
+einsehbar. Briefings sowie druckfreundliche Schicht- und Check-in-Listen werden
+über die jeweilige Veranstaltungsansicht verwaltet bzw. geöffnet.
 
 ## Technology Stack
 
