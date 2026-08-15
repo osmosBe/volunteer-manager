@@ -86,3 +86,42 @@ jobs:
           fi
 
           echo "DEV revision, liveness and readiness checks passed for $EXPECTED_VERSION."
+
+      - name: Diagnose failed DEV revision
+        if: failure()
+        env:
+          CONTAINER_APP_NAME: ${{ secrets.AZURE_CONTAINER_APP_NAME }}
+          RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
+        run: |
+          latest_revision=$(az containerapp revision list \
+            --name "$CONTAINER_APP_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --query "sort_by(@, &properties.createdTime)[-1].name" \
+            --output tsv)
+
+          if [ -z "$latest_revision" ]; then
+            echo "::error title=DEV revision diagnostics::Azure returned no Container Apps revision."
+            exit 0
+          fi
+
+          revision_state=$(az containerapp revision show \
+            --name "$CONTAINER_APP_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --revision "$latest_revision" \
+            --query "{revision:name,active:properties.active,health:properties.healthState,provisioning:properties.provisioningState,replicas:properties.replicas}" \
+            --output json | tr '\n' ' ')
+          echo "::error title=DEV revision diagnostics::$revision_state"
+
+          az containerapp logs show \
+            --name "$CONTAINER_APP_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --revision "$latest_revision" \
+            --type system \
+            --tail 100 || true
+
+          az containerapp logs show \
+            --name "$CONTAINER_APP_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --revision "$latest_revision" \
+            --type console \
+            --tail 150 || true
