@@ -1,14 +1,12 @@
 name: Deploy DEV
 
 on:
-  workflow_run:
-    workflows:
-      - CI
-    branches:
-      - dev
-    types:
-      - completed
-  workflow_dispatch:
+  workflow_call:
+    inputs:
+      deploy_sha:
+        description: Commit SHA that passed CI and must be deployed
+        required: true
+        type: string
 
 permissions:
   id-token: write
@@ -16,12 +14,11 @@ permissions:
 
 env:
   IMAGE_NAME: stpride-volunteer-management
-  DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+  DEPLOY_SHA: ${{ inputs.deploy_sha }}
 
 jobs:
   build-and-deploy:
     name: Build, migrate and deploy DEV
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     environment: development
 

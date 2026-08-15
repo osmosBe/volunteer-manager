@@ -74,3 +74,18 @@ jobs:
       - name: Parse bootstrap script without external changes
         shell: pwsh
         run: ./scripts/bootstrap.ps1 -ValidateOnly
+
+  deploy-dev:
+    name: Deploy tested revision to DEV
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    needs:
+      - test
+      - postgres-migrations
+      - infrastructure
+    permissions:
+      id-token: write
+      contents: read
+    uses: ./.github/workflows/deploy-dev.yml
+    with:
+      deploy_sha: ${{ github.sha }}
+    secrets: inherit
