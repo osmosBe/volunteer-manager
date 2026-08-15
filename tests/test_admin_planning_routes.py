@@ -105,6 +105,30 @@ def test_admin_can_create_plan_edit_and_duplicate_event(tmp_path):
         )
         with Session() as db:
             role_id = db.get(Event, event_id).teams[0].roles[0].id
+        assert (
+            client.post(
+                f"/admin/bereiche/{team_id}",
+                data={
+                    "name": "Awareness & Info",
+                    "description": "Hilft vor Ort",
+                    "meeting_point": "Infostand",
+                },
+                follow_redirects=False,
+            ).status_code
+            == 303
+        )
+        assert (
+            client.post(
+                f"/admin/aufgaben/{role_id}",
+                data={
+                    "name": "Infopoint Betreuung",
+                    "description": "Information",
+                    "requirements": "Briefing",
+                },
+                follow_redirects=False,
+            ).status_code
+            == 303
+        )
         shift_response = client.post(
             f"/admin/veranstaltungen/{event_id}/schichten",
             data={
@@ -118,6 +142,25 @@ def test_admin_can_create_plan_edit_and_duplicate_event(tmp_path):
             follow_redirects=False,
         )
         assert shift_response.status_code == 303
+        with Session() as db:
+            shift_id = db.query(Shift).one().id
+        assert (
+            client.post(
+                f"/admin/schichten/{shift_id}/bearbeiten",
+                data={
+                    "title": "Info Früh aktualisiert",
+                    "role_id": role_id,
+                    "starts_at": start.isoformat(),
+                    "ends_at": (start + timedelta(hours=3)).isoformat(),
+                    "needed_count": 4,
+                    "waitlist_capacity": 2,
+                    "status": "open",
+                    "location": "Hauptinfo",
+                },
+                follow_redirects=False,
+            ).status_code
+            == 303
+        )
         assert (
             client.get(
                 f"/admin/veranstaltungen/{event_id}/druck/schichtplan"
@@ -137,5 +180,7 @@ def test_admin_can_create_plan_edit_and_duplicate_event(tmp_path):
             assert db.query(TeamMaterial).one().quantity_available == 4
             assert db.query(Volunteer).count() == 1
             assert db.get(Event, event_id).status == EventStatus.registration_open
+            assert db.get(Shift, shift_id).title == "Info Früh aktualisiert"
+            assert db.get(Shift, shift_id).needed_count == 4
     finally:
         app.dependency_overrides.clear()
