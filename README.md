@@ -36,6 +36,11 @@ Der mobil nutzbare Check-in ist unter `/admin/check-in` verfügbar. Dort werden
 bestätigte Zuteilungen eingecheckt, Lanyard/Bändchen/Funkgerät dokumentiert und
 beim Check-out als zurückgegeben markiert.
 
+CSV-Exporte sind zweckgebunden pro Veranstaltung verfügbar: Kontaktliste unter
+`/admin/export/veranstaltungen/<id>/kontakte.csv` und Schichtbelegung unter
+`/admin/export/veranstaltungen/<id>/schichten.csv`. Sensible Freitexte werden
+nicht exportiert.
+
 ## Technology Stack
 
 - Python 3.13
