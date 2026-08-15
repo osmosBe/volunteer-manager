@@ -64,6 +64,10 @@ Schicht einen QR-Code in ihrer token-geschützten Bestätigung. Der Code enthäl
 nur die Admin-Scan-URL mit der internen Zuteilungs-ID, keine Kontakt- oder
 Gesundheitsdaten. Ein Scan öffnet nach Easy-Auth-Prüfung die mobile
 Check-in-Bestätigung. QR-Karten können pro Veranstaltung gedruckt werden.
+Die für den jeweiligen Arbeitsbereich administrierten Materialien stehen dabei
+direkt in der Listen- und QR-Check-in-Maske zur Auswahl. Ausgabe und Rückgabe
+werden je Zuteilung historisiert; Verbrauchsmaterial wird nicht als rückgabepflichtig
+behandelt und eine Ausgabe über den erfassten Bestand hinaus wird verhindert.
 
 CSV-Exporte sind zweckgebunden pro Veranstaltung verfügbar: Kontaktliste unter
 `/admin/export/veranstaltungen/<id>/kontakte.csv` und Schichtbelegung unter

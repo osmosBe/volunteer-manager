@@ -109,6 +109,7 @@ def test_initial_migration_creates_tables(tmp_path):
         "audit_logs",
         "teams",
         "team_materials",
+        "checkin_materials",
         "smtp_configurations",
         "roles",
         "checkins",

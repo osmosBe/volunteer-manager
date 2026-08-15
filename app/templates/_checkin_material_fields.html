@@ -1,0 +1,29 @@
+{% set team = assignment.shift.role.team if assignment.shift.role else none %}
+{% if team and team.materials %}
+  <fieldset class="mb-3">
+    <legend class="h6">Material aus „{{ team.name }}“</legend>
+    <div class="d-flex flex-column gap-2">
+      {% for material in team.materials if material.is_active %}
+        <label class="border rounded p-2">
+          <input type="checkbox" name="material_ids" value="{{ material.id }}"
+                 {% if material.quantity_available < 1 %}disabled{% endif %}>
+          <strong>{{ material.name }}</strong>
+          <span class="text-muted">· 1 {{ material.unit }}{% if material.is_consumable %} · Verbrauch{% else %} · Rückgabe erforderlich{% endif %}</span>
+          {% if material.notes %}<small class="d-block text-muted">{{ material.notes }}</small>{% endif %}
+          {% if material.quantity_available < 1 %}<small class="d-block text-danger">Kein Bestand erfasst</small>{% endif %}
+        </label>
+      {% else %}
+        <p class="text-muted">In diesem Arbeitsbereich ist kein aktives Material hinterlegt.</p>
+      {% endfor %}
+    </div>
+  </fieldset>
+{% endif %}
+<details class="mb-3">
+  <summary>Allgemeine Ausgabe</summary>
+  <div class="d-flex flex-wrap gap-3 mt-2">
+    <label><input type="checkbox" name="lanyard" value="true"> Lanyard</label>
+    <label><input type="checkbox" name="wristband" value="true"> Bändchen</label>
+    <label><input type="checkbox" name="radio" value="true"> Funkgerät</label>
+  </div>
+  <label class="form-label mt-2">Sonstiges<input class="form-control" name="other"></label>
+</details>

@@ -1697,6 +1697,7 @@ def checkin_submit(
     wristband: Annotated[bool, Form()] = False,
     radio: Annotated[bool, Form()] = False,
     other: Annotated[str | None, Form()] = None,
+    material_ids: Annotated[list[int] | None, Form()] = None,
 ):
     assignment = db.get(ShiftAssignment, assignment_id)
     if assignment is None:
@@ -1709,6 +1710,7 @@ def checkin_submit(
             wristband=wristband,
             radio=radio,
             other=other,
+            material_ids=material_ids,
         )
     except CheckInError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

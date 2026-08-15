@@ -9,11 +9,15 @@ from app.main import app
 from app.models import (
     AgeGroup,
     AssignmentStatus,
+    CheckInMaterial,
     Event,
     EventStatus,
+    Role,
     Shift,
     ShiftAssignment,
     ShiftStatus,
+    Team,
+    TeamMaterial,
     Volunteer,
 )
 from app.services.volunteers import deterministic_email_hash, normalize_email
@@ -26,8 +30,26 @@ def test_admin_checkin_and_material_return_smoke_flow(tmp_path):
     start = datetime.now(timezone.utc) + timedelta(hours=1)
     with Session() as db:
         event = Event(name="Check-in Test", slug="checkin", status=EventStatus.ongoing)
+        team = Team(event=event, name="Infobereich")
+        role = Role(team=team, name="Infopoint")
+        radio_material = TeamMaterial(
+            team=team,
+            name="Team-Funkgerät",
+            quantity_required=2,
+            quantity_available=2,
+            unit="Stück",
+        )
+        flyers = TeamMaterial(
+            team=team,
+            name="Flyerpaket",
+            quantity_required=10,
+            quantity_available=10,
+            unit="Paket",
+            is_consumable=True,
+        )
         shift = Shift(
             event=event,
+            role=role,
             title="Infostand",
             starts_at=start,
             ends_at=start + timedelta(hours=2),
@@ -49,9 +71,13 @@ def test_admin_checkin_and_material_return_smoke_flow(tmp_path):
             shift=shift,
             assignment_status=AssignmentStatus.confirmed,
         )
-        db.add_all([event, shift, volunteer, assignment])
+        db.add_all(
+            [event, team, role, radio_material, flyers, shift, volunteer, assignment]
+        )
         db.commit()
         assignment_id = assignment.id
+        radio_material_id = radio_material.id
+        flyers_id = flyers.id
 
     def override_get_db():
         with Session() as db:
@@ -66,13 +92,19 @@ def test_admin_checkin_and_material_return_smoke_flow(tmp_path):
         scan_page = client.get(f"/admin/check-in/scan/{assignment_id}")
         assert scan_page.status_code == 200
         assert "QR-Check-in" in scan_page.text
+        assert "Team-Funkgerät" in scan_page.text
+        assert "Flyerpaket" in scan_page.text
         qr_response = client.get(f"/admin/zuteilungen/{assignment_id}/qr.svg")
         assert qr_response.status_code == 200
         assert qr_response.headers["content-type"].startswith("image/svg+xml")
         assert b"checkin@example.invalid" not in qr_response.content
         response = client.post(
             f"/admin/check-in/{assignment_id}",
-            data={"lanyard": "true", "radio": "true"},
+            data={
+                "lanyard": "true",
+                "radio": "true",
+                "material_ids": [str(radio_material_id), str(flyers_id)],
+            },
             follow_redirects=False,
         )
         assert response.status_code == 303
@@ -87,5 +119,16 @@ def test_admin_checkin_and_material_return_smoke_flow(tmp_path):
             assert checked.checkin.lanyard_issued is True
             assert checked.checkin.radio_issued is True
             assert checked.checkin.materials_returned_at is not None
+            issues = db.query(CheckInMaterial).order_by(CheckInMaterial.id).all()
+            assert len(issues) == 2
+            radio_issue = next(
+                issue for issue in issues if issue.material_id == radio_material_id
+            )
+            flyer_issue = next(
+                issue for issue in issues if issue.material_id == flyers_id
+            )
+            assert radio_issue.returned_at is not None
+            assert flyer_issue.return_required is False
+            assert flyer_issue.returned_at is None
     finally:
         app.dependency_overrides.clear()
