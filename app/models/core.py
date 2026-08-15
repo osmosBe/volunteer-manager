@@ -220,6 +220,9 @@ class TeamMaterial(TimestampMixin, Base):
     is_consumable: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     team: Mapped[Team] = relationship(back_populates="materials")
+    checkin_issues: Mapped[list["CheckInMaterial"]] = relationship(
+        back_populates="material"
+    )
 
 
 class Role(TimestampMixin, Base):
@@ -414,6 +417,31 @@ class CheckIn(TimestampMixin, Base):
     )
     note: Mapped[str | None] = mapped_column(Text)
     assignment: Mapped[ShiftAssignment] = relationship(back_populates="checkin")
+    material_issues: Mapped[list["CheckInMaterial"]] = relationship(
+        back_populates="checkin", cascade="all, delete-orphan"
+    )
+
+
+class CheckInMaterial(Base):
+    __tablename__ = "checkin_materials"
+    __table_args__ = (
+        UniqueConstraint("checkin_id", "material_id", name="uq_checkin_material"),
+    )
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    checkin_id: Mapped[int] = mapped_column(
+        ForeignKey("checkins.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    material_id: Mapped[int] = mapped_column(
+        ForeignKey("team_materials.id"), nullable=False, index=True
+    )
+    quantity_issued: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    return_required: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    issued_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    returned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    checkin: Mapped[CheckIn] = relationship(back_populates="material_issues")
+    material: Mapped[TeamMaterial] = relationship(back_populates="checkin_issues")
 
 
 class Briefing(TimestampMixin, Base):
