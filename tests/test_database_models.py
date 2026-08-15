@@ -257,6 +257,15 @@ def test_demo_seed_is_idempotent_and_uses_fictional_contacts(tmp_path):
         )
 
 
+def test_dev_workflow_passes_seed_module_as_separate_azure_cli_arguments():
+    workflow = (
+        Path(__file__).parents[1] / ".github/workflows/deploy-dev.yml"
+    ).read_text(encoding="utf-8")
+
+    assert '--args "-m" "scripts.seed_default_event"' in workflow
+    assert "--args=-m scripts.seed_default_event" not in workflow
+
+
 def test_volunteer_can_be_created_without_birth_date(tmp_path):
     engine = create_database_engine(f"sqlite:///{tmp_path / 'volunteer.db'}")
     Base.metadata.create_all(engine)

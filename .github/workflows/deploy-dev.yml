@@ -164,9 +164,14 @@ jobs:
             --resource-group "$RESOURCE_GROUP" \
             --image "$DEPLOY_IMAGE" \
             --command python \
-            --args=-m scripts.seed_default_event \
+            --args "-m" "scripts.seed_default_event" \
             --query name \
             --output tsv)
+          if [ -z "$execution_name" ]; then
+            echo "Azure did not return a fictional seed execution name." >&2
+            exit 1
+          fi
+          echo "SEED_EXECUTION=$execution_name" >> "$GITHUB_ENV"
           for attempt in $(seq 1 90); do
             execution_status=$(az containerapp job execution show \
               --name "$MIGRATION_JOB_NAME" \
@@ -175,8 +180,14 @@ jobs:
               --query properties.status \
               --output tsv 2>/dev/null || true)
             case "$execution_status" in
-              Succeeded) exit 0 ;;
-              Failed|Stopped|Degraded) exit 1 ;;
+              Succeeded)
+                echo "Fictional seed execution $execution_name succeeded."
+                exit 0
+                ;;
+              Failed|Stopped|Degraded)
+                echo "Fictional seed execution $execution_name ended as $execution_status." >&2
+                exit 1
+                ;;
             esac
             sleep 5
           done
@@ -238,6 +249,14 @@ jobs:
               --name "$MIGRATION_JOB_NAME" \
               --resource-group "$RESOURCE_GROUP" \
               --job-execution-name "$MIGRATION_EXECUTION" \
+              --query "{name:name,status:properties.status,start:properties.startTime,end:properties.endTime}" \
+              --output json || true
+          fi
+          if [ -n "${SEED_EXECUTION:-}" ]; then
+            az containerapp job execution show \
+              --name "$MIGRATION_JOB_NAME" \
+              --resource-group "$RESOURCE_GROUP" \
+              --job-execution-name "$SEED_EXECUTION" \
               --query "{name:name,status:properties.status,start:properties.startTime,end:properties.endTime}" \
               --output json || true
           fi
