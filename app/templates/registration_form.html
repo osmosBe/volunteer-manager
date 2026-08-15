@@ -1,6 +1,133 @@
-{% extends "base.html" %}{% block content %}<h1>Anmeldung: {{ event.name }}</h1><p>{{ event.short_description or '' }}</p>{% if error %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endif %}
-<form class="card card-body mb-4" method="get"><h2 class="h5">Schichten filtern</h2><div class="row g-2"><div class="col-md-4"><select class="form-select" name="team_id"><option value="">Alle Arbeitsbereiche</option>{% for team in event.teams %}<option value="{{ team.id }}" {% if filters.team_id == team.id %}selected{% endif %}>{{ team.name }}</option>{% endfor %}</select></div><div class="col-md-3"><input class="form-control" type="date" name="day" value="{{ filters.day.isoformat() if filters.day else '' }}"></div><div class="col-md-2"><input class="form-control" type="time" name="time_from" value="{{ filters.time_from.strftime('%H:%M') if filters.time_from else '' }}"></div><div class="col-md-2"><input class="form-control" type="time" name="time_to" value="{{ filters.time_to.strftime('%H:%M') if filters.time_to else '' }}"></div><div class="col-md-1"><button class="btn btn-outline-primary">OK</button></div><div class="col-12"><label><input type="checkbox" name="available_only" value="true" {% if filters.available_only %}checked{% endif %}> nur freie Plätze</label> <a class="ms-3" href="/veranstaltungen/{{ event.slug }}/anmeldung">zurücksetzen</a></div></div></form>
-<form method="post" class="needs-validation" id="registration-form" novalidate><fieldset class="mb-4"><legend class="h3">Schichten auswählen</legend>{% for shift in shifts %}<div class="form-check card p-3 mb-2"><input class="form-check-input shift-choice" type="checkbox" name="shift_ids" value="{{ shift.id }}" id="shift-{{ shift.id }}" data-label="{{ shift.starts_at.strftime('%d.%m. %H:%M') }} – {{ shift.title }}"><label class="form-check-label ms-2" for="shift-{{ shift.id }}"><strong>{{ shift.title }}</strong><br>{{ shift.starts_at.strftime('%d.%m.%Y %H:%M') }}–{{ shift.ends_at.strftime('%H:%M') }} Uhr{% if shift.location %} · {{ shift.location }}{% endif %}<br><small>{% if places[shift.id] %}{{ places[shift.id] }} freie Plätze{% elif shift.waitlist_capacity %}Warteliste{% else %}voll{% endif %}{% if event.allows_minors and not shift.allows_minors %} · diese Schicht ab 18{% endif %}</small></label></div>{% else %}<p class="alert alert-info">Keine Schichten entsprechen dem Filter.</p>{% endfor %}</fieldset>
-<fieldset class="mb-4"><legend class="h3">Deine Daten</legend><div class="row g-3"><div class="col-md-6"><label class="form-label" for="first_name">Vorname</label><input class="form-control" required id="first_name" name="first_name"></div><div class="col-md-6"><label class="form-label" for="last_name">Nachname</label><input class="form-control" required id="last_name" name="last_name"></div><div class="col-md-6"><label class="form-label" for="email">E-Mail-Adresse</label><input class="form-control" required type="email" id="email" name="email"><div class="form-text">Die Adresse wird zusätzlich serverseitig validiert.</div></div><div class="col-md-6"><label class="form-label" for="birth_date">Geburtsdatum</label><input class="form-control" required type="date" id="birth_date" name="birth_date"><div class="form-text">Wird zur Prüfung der Altersfreigabe am Veranstaltungstag verwendet.</div></div><div class="col-md-6"><label class="form-label" for="phone">Telefonnummer <span class="text-muted">(optional)</span></label><input class="form-control" id="phone" name="phone"></div><div class="col-md-6"><label class="form-label" for="pronouns">Pronomen <span class="text-muted">(optional)</span></label><input class="form-control" id="pronouns" name="pronouns"></div></div></fieldset>
-<section class="card card-body mb-4" aria-live="polite"><h2 class="h4">Zusammenfassung vor dem Absenden</h2><p id="review-person" class="mb-2">Kontaktdaten bitte ausfüllen.</p><ul id="review-shifts"><li>Noch keine Schicht gewählt.</li></ul></section><div class="form-check mb-2"><input class="form-check-input" required type="checkbox" id="contact_consent" name="contact_consent" value="true"><label class="form-check-label" for="contact_consent">Ich stimme zu, für diese Veranstaltung kontaktiert zu werden.</label></div><div class="form-check mb-4"><input class="form-check-input" type="checkbox" id="future_contact_consent" name="future_contact_consent" value="true"><label class="form-check-label" for="future_contact_consent">ST. PRIDE darf mich künftig über weitere Ehrenamtsmöglichkeiten informieren.</label></div><button class="btn btn-primary btn-lg" type="submit">Verbindlich anmelden</button></form>
-<script>const form=document.getElementById('registration-form');const review=()=>{const first=document.getElementById('first_name').value.trim();const last=document.getElementById('last_name').value.trim();const email=document.getElementById('email').value.trim();document.getElementById('review-person').textContent=(first||last||email)?`${first} ${last} · ${email}`:'Kontaktdaten bitte ausfüllen.';const choices=[...document.querySelectorAll('.shift-choice:checked')];const list=document.getElementById('review-shifts');list.replaceChildren();for(const label of (choices.length?choices.map(item=>item.dataset.label):['Noch keine Schicht gewählt.'])){const item=document.createElement('li');item.textContent=label;list.appendChild(item);}};form.addEventListener('input',review);review();</script>{% endblock %}
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .shift-option { cursor: pointer; transition: border-color .15s, background-color .15s, box-shadow .15s; }
+  .shift-option:hover { border-color: var(--bs-primary); box-shadow: 0 .125rem .35rem rgba(0,0,0,.08); }
+  .shift-option.is-selected { border-color: var(--bs-primary); background: var(--bs-primary-bg-subtle); }
+  .shift-option:has(input:disabled) { cursor: not-allowed; opacity: .7; }
+</style>
+
+<h1>Anmeldung: {{ event.name }}</h1>
+<p>{{ event.short_description or '' }}</p>
+
+<div
+  id="registration-errors"
+  class="alert alert-danger{% if not error %} d-none{% endif %}"
+  role="alert"
+  aria-live="assertive"
+  tabindex="-1"
+>
+  <strong>Bitte prüfe deine Angaben:</strong>
+  <ul id="registration-error-list" class="mb-0 mt-2">
+    {% if error %}<li data-server-error>{{ error }}</li>{% endif %}
+  </ul>
+</div>
+
+<form class="card card-body mb-4" method="get">
+  <h2 class="h5">Schichten filtern</h2>
+  <div class="row g-2">
+    <div class="col-md-4">
+      <label class="visually-hidden" for="team-filter">Arbeitsbereich</label>
+      <select class="form-select" id="team-filter" name="team_id">
+        <option value="">Alle Arbeitsbereiche</option>
+        {% for team in event.teams %}
+          <option value="{{ team.id }}" {% if filters.team_id == team.id %}selected{% endif %}>{{ team.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3"><label class="visually-hidden" for="day-filter">Tag</label><input class="form-control" id="day-filter" type="date" name="day" value="{{ filters.day.isoformat() if filters.day else '' }}"></div>
+    <div class="col-md-2"><label class="visually-hidden" for="from-filter">Von</label><input class="form-control" id="from-filter" type="time" name="time_from" value="{{ filters.time_from.strftime('%H:%M') if filters.time_from else '' }}"></div>
+    <div class="col-md-2"><label class="visually-hidden" for="to-filter">Bis</label><input class="form-control" id="to-filter" type="time" name="time_to" value="{{ filters.time_to.strftime('%H:%M') if filters.time_to else '' }}"></div>
+    <div class="col-md-1"><button class="btn btn-outline-primary">OK</button></div>
+    <div class="col-12">
+      <label><input type="checkbox" name="available_only" value="true" {% if filters.available_only %}checked{% endif %}> nur freie Plätze</label>
+      <a class="ms-3" href="/veranstaltungen/{{ event.slug }}/anmeldung">zurücksetzen</a>
+    </div>
+  </div>
+</form>
+
+<form
+  method="post"
+  id="registration-form"
+  novalidate
+  aria-describedby="registration-errors"
+  data-event-date="{{ event.starts_at.date().isoformat() if event.starts_at else '' }}"
+  data-allows-minors="{{ 'true' if event.allows_minors else 'false' }}"
+>
+  <fieldset class="mb-4" id="shift-selection">
+    <legend class="h3">1. Schichten auswählen</legend>
+    <p class="text-muted">Du kannst eine oder mehrere Schichten wählen. Ausgewählte Schichten werden farbig markiert.</p>
+    {% for shift in shifts %}
+      {% set unavailable = not places[shift.id] and not shift.waitlist_capacity %}
+      <div class="form-check card p-3 mb-2 shift-option{% if shift.id in selected_shift_ids %} is-selected{% endif %}">
+        <input
+          class="form-check-input shift-choice"
+          type="checkbox"
+          name="shift_ids"
+          value="{{ shift.id }}"
+          id="shift-{{ shift.id }}"
+          data-label="{{ shift.starts_at.strftime('%d.%m. %H:%M') }} – {{ shift.title }}"
+          data-start="{{ shift.starts_at.isoformat() }}"
+          data-end="{{ shift.ends_at.isoformat() }}"
+          data-allows-minors="{{ 'true' if shift.allows_minors else 'false' }}"
+          {% if shift.id in selected_shift_ids %}checked{% endif %}
+          {% if unavailable %}disabled{% endif %}
+        >
+        <label class="form-check-label ms-2 d-flex flex-column flex-md-row justify-content-between gap-3" for="shift-{{ shift.id }}">
+          <span>
+            <strong>{{ shift.title }}</strong><br>
+            {{ shift.starts_at.strftime('%d.%m.%Y %H:%M') }}–{{ shift.ends_at.strftime('%H:%M') }} Uhr{% if shift.location %} · {{ shift.location }}{% endif %}<br>
+            <small>
+              {% if places[shift.id] %}{{ places[shift.id] }} freie Plätze{% elif shift.waitlist_capacity %}Warteliste{% else %}voll{% endif %}
+              {% if event.allows_minors and not shift.allows_minors %} · diese Schicht ab 18{% endif %}
+            </small>
+          </span>
+          <span class="btn {% if shift.id in selected_shift_ids %}btn-primary{% else %}btn-outline-primary{% endif %} align-self-md-center shift-toggle" aria-hidden="true">
+            {% if shift.id in selected_shift_ids %}Ausgewählt ✓{% elif unavailable %}Nicht verfügbar{% else %}Auswählen{% endif %}
+          </span>
+        </label>
+      </div>
+    {% else %}
+      <p class="alert alert-info">Keine Schichten entsprechen dem Filter.</p>
+    {% endfor %}
+  </fieldset>
+
+  <fieldset class="mb-4">
+    <legend class="h3">2. Deine Daten</legend>
+    <div class="row g-3">
+      <div class="col-md-6"><label class="form-label" for="first_name">Vorname</label><input class="form-control" required autocomplete="given-name" id="first_name" name="first_name" value="{{ form_values.first_name or '' }}"></div>
+      <div class="col-md-6"><label class="form-label" for="last_name">Nachname</label><input class="form-control" required autocomplete="family-name" id="last_name" name="last_name" value="{{ form_values.last_name or '' }}"></div>
+      <div class="col-md-6">
+        <label class="form-label" for="email">E-Mail-Adresse</label>
+        <input class="form-control" required autocomplete="email" type="email" id="email" name="email" value="{{ form_values.email or '' }}">
+        <div class="form-text">Die Adresse wird zusätzlich serverseitig validiert.</div>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label" for="birth_date">Geburtsdatum</label>
+        <input class="form-control" required autocomplete="bday" type="date" id="birth_date" name="birth_date" value="{{ form_values.birth_date or '' }}">
+        <div class="form-text">Wird zur Prüfung der Altersfreigabe am Veranstaltungstag verwendet.</div>
+      </div>
+      <div class="col-md-6"><label class="form-label" for="phone">Telefonnummer <span class="text-muted">(optional)</span></label><input class="form-control" autocomplete="tel" type="tel" id="phone" name="phone" value="{{ form_values.phone or '' }}"></div>
+      <div class="col-md-6"><label class="form-label" for="pronouns">Pronomen <span class="text-muted">(optional)</span></label><input class="form-control" id="pronouns" name="pronouns" value="{{ form_values.pronouns or '' }}"></div>
+    </div>
+  </fieldset>
+
+  <section class="card card-body mb-4" aria-live="polite">
+    <h2 class="h4">3. Zusammenfassung vor dem Absenden</h2>
+    <p id="review-person" class="mb-2">Kontaktdaten bitte ausfüllen.</p>
+    <ul id="review-shifts"><li>Noch keine Schicht gewählt.</li></ul>
+  </section>
+
+  <div class="form-check mb-2">
+    <input class="form-check-input" required type="checkbox" id="contact_consent" name="contact_consent" value="true" {% if form_values.contact_consent %}checked{% endif %}>
+    <label class="form-check-label" for="contact_consent">Ich stimme zu, für diese Veranstaltung kontaktiert zu werden.</label>
+  </div>
+  <div class="form-check mb-4">
+    <input class="form-check-input" type="checkbox" id="future_contact_consent" name="future_contact_consent" value="true" {% if form_values.future_contact_consent %}checked{% endif %}>
+    <label class="form-check-label" for="future_contact_consent">ST. PRIDE darf mich künftig über weitere Ehrenamtsmöglichkeiten informieren.</label>
+  </div>
+  <button class="btn btn-primary btn-lg" type="submit">Verbindlich anmelden</button>
+</form>
+
+<script src="/static/js/registration-form.js"></script>
+{% endblock %}

@@ -1,6 +1,62 @@
-{% extends "base.html" %}{% block content %}
-<header class="p-4 p-md-5 mb-4 rounded-3 text-white" style="background:linear-gradient(135deg,#5b168c,#d3136a)"><h1 class="display-5">{{ event.name }}</h1><p class="lead mb-0">{{ event.short_description or 'Ehrenamtliche gesucht' }}</p></header>
-<div class="row g-4"><main class="col-lg-8">{% if event.description %}<section class="mb-4"><h2>Über die Veranstaltung</h2><div style="white-space:pre-line">{{ event.description }}</div></section>{% endif %}<section><h2>Offene Schichten</h2><form class="card card-body mb-3" method="get"><div class="row g-2"><div class="col-md-4"><label class="form-label">Arbeitsbereich<select class="form-select" name="team_id"><option value="">Alle Bereiche</option>{% for team in event.teams %}<option value="{{ team.id }}" {% if filters.team_id == team.id %}selected{% endif %}>{{ team.name }}</option>{% endfor %}</select></label></div><div class="col-md-3"><label class="form-label">Tag<input class="form-control" type="date" name="day" value="{{ filters.day.isoformat() if filters.day else '' }}"></label></div><div class="col-md-2"><label class="form-label">Von<input class="form-control" type="time" name="time_from" value="{{ filters.time_from.strftime('%H:%M') if filters.time_from else '' }}"></label></div><div class="col-md-2"><label class="form-label">Bis<input class="form-control" type="time" name="time_to" value="{{ filters.time_to.strftime('%H:%M') if filters.time_to else '' }}"></label></div><div class="col-md-1 d-flex align-items-end"><button class="btn btn-outline-primary">Filter</button></div><div class="col-12"><label><input type="checkbox" name="available_only" value="true" {% if filters.available_only %}checked{% endif %}> nur Schichten mit freien Plätzen</label> <a class="ms-3" href="/veranstaltungen/{{ event.slug }}">zurücksetzen</a></div></div></form>
-{% for shift in shifts %}<article class="card mb-3"><div class="card-body"><div class="d-flex justify-content-between gap-3"><div><h3 class="h5">{{ shift.title }}</h3><p class="mb-1"><strong>{{ shift.starts_at.strftime('%d.%m.%Y %H:%M') }}–{{ shift.ends_at.strftime('%H:%M') }} Uhr</strong></p><p class="mb-1">{{ shift.role.team.name if shift.role else 'Allgemein' }} · {{ shift.location or event.public_meeting_point or 'Treffpunkt folgt' }}</p><p class="mb-0">{{ shift.volunteer_notes or shift.description or '' }}</p></div><span class="badge {% if places[shift.id] %}text-bg-success{% else %}text-bg-warning{% endif %} align-self-start">{% if places[shift.id] %}{{ places[shift.id] }} frei{% elif shift.waitlist_capacity %}Warteliste{% else %}voll{% endif %}</span></div></div></article>{% else %}<p class="alert alert-info">Für diese Filter gibt es derzeit keine offenen Schichten.</p>{% endfor %}</section></main>
-<aside class="col-lg-4"><div class="card mb-3"><div class="card-body"><h2 class="h5">Wann und wo?</h2>{% if event.starts_at %}<p>{{ event.starts_at.strftime('%d.%m.%Y %H:%M') }}{% if event.ends_at %}<br>bis {{ event.ends_at.strftime('%d.%m.%Y %H:%M') }}{% endif %}</p>{% endif %}{% if event.venue %}<p><strong>{{ event.venue }}</strong>{% if event.address %}<br>{{ event.address }}{% endif %}</p>{% endif %}{% if event.public_meeting_point %}<p>Treffpunkt: {{ event.public_meeting_point }}</p>{% endif %}<p><strong>Altersfreigabe:</strong> {{ 'U18-Teilnahme möglich; bitte Schichtfreigaben beachten' if event.allows_minors else 'Teilnahme ab 18 Jahren' }}</p></div></div>{% if event.briefing or event.clothing_and_material or event.catering_info or event.accessibility_info %}<div class="card mb-3"><div class="card-body"><h2 class="h5">Gut zu wissen</h2>{% if event.briefing %}<h3 class="h6">Briefing</h3><p style="white-space:pre-line">{{ event.briefing }}</p>{% endif %}{% if event.clothing_and_material %}<h3 class="h6">Kleidung & Material</h3><p style="white-space:pre-line">{{ event.clothing_and_material }}</p>{% endif %}{% if event.catering_info %}<h3 class="h6">Verpflegung</h3><p style="white-space:pre-line">{{ event.catering_info }}</p>{% endif %}{% if event.accessibility_info %}<h3 class="h6">Barrierefreiheit</h3><p style="white-space:pre-line">{{ event.accessibility_info }}</p>{% endif %}</div></div>{% endif %}{% if event.contact_name or event.contact_email or event.contact_phone %}<div class="card mb-3"><div class="card-body"><h2 class="h5">Kontakt</h2><p>{{ event.contact_name or '' }}{% if event.contact_email %}<br><a href="mailto:{{ event.contact_email }}">{{ event.contact_email }}</a>{% endif %}{% if event.contact_phone %}<br>{{ event.contact_phone }}{% endif %}</p></div></div>{% endif %}<a class="btn btn-primary btn-lg w-100" href="/veranstaltungen/{{ event.slug }}/anmeldung{% if request.url.query %}?{{ request.url.query }}{% endif %}">Jetzt anmelden</a></aside></div>
+{% extends "base.html" %}
+{% block content %}
+<header class="p-4 p-md-5 mb-4 rounded-3 text-white" style="background:linear-gradient(135deg,#5b168c,#d3136a)">
+  <h1 class="display-5">{{ event.name }}</h1>
+  <p class="lead mb-0">{{ event.short_description or 'Ehrenamtliche gesucht' }}</p>
+</header>
+
+<div class="row g-4">
+  <main class="col-lg-8">
+    {% if event.description %}
+      <section class="mb-4"><h2>Über die Veranstaltung</h2><div style="white-space:pre-line">{{ event.description }}</div></section>
+    {% endif %}
+    <section>
+      <h2>Offene Schichten</h2>
+      <p class="text-muted">Klicke eine Schicht an, um sie direkt für deine Anmeldung auszuwählen.</p>
+      <form class="card card-body mb-3" method="get">
+        <div class="row g-2">
+          <div class="col-md-4"><label class="form-label">Arbeitsbereich<select class="form-select" name="team_id"><option value="">Alle Bereiche</option>{% for team in event.teams %}<option value="{{ team.id }}" {% if filters.team_id == team.id %}selected{% endif %}>{{ team.name }}</option>{% endfor %}</select></label></div>
+          <div class="col-md-3"><label class="form-label">Tag<input class="form-control" type="date" name="day" value="{{ filters.day.isoformat() if filters.day else '' }}"></label></div>
+          <div class="col-md-2"><label class="form-label">Von<input class="form-control" type="time" name="time_from" value="{{ filters.time_from.strftime('%H:%M') if filters.time_from else '' }}"></label></div>
+          <div class="col-md-2"><label class="form-label">Bis<input class="form-control" type="time" name="time_to" value="{{ filters.time_to.strftime('%H:%M') if filters.time_to else '' }}"></label></div>
+          <div class="col-md-1 d-flex align-items-end"><button class="btn btn-outline-primary">Filter</button></div>
+          <div class="col-12"><label><input type="checkbox" name="available_only" value="true" {% if filters.available_only %}checked{% endif %}> nur Schichten mit freien Plätzen</label> <a class="ms-3" href="/veranstaltungen/{{ event.slug }}">zurücksetzen</a></div>
+        </div>
+      </form>
+
+      {% for shift in shifts %}
+        {% set unavailable = not places[shift.id] and not shift.waitlist_capacity %}
+        <article class="card mb-3 position-relative{% if not unavailable %} border-primary{% endif %}">
+          <div class="card-body">
+            <div class="d-flex flex-column flex-md-row justify-content-between gap-3">
+              <div>
+                <h3 class="h5">{{ shift.title }}</h3>
+                <p class="mb-1"><strong>{{ shift.starts_at.strftime('%d.%m.%Y %H:%M') }}–{{ shift.ends_at.strftime('%H:%M') }} Uhr</strong></p>
+                <p class="mb-1">{{ shift.role.team.name if shift.role else 'Allgemein' }} · {{ shift.location or event.public_meeting_point or 'Treffpunkt folgt' }}</p>
+                <p class="mb-0">{{ shift.volunteer_notes or shift.description or '' }}</p>
+              </div>
+              <div class="d-flex flex-md-column align-items-start align-items-md-end gap-2">
+                <span class="badge {% if places[shift.id] %}text-bg-success{% else %}text-bg-warning{% endif %}">{% if places[shift.id] %}{{ places[shift.id] }} frei{% elif shift.waitlist_capacity %}Warteliste{% else %}voll{% endif %}</span>
+                {% if unavailable %}
+                  <span class="btn btn-secondary disabled" aria-disabled="true">Ausgebucht</span>
+                {% else %}
+                  <a class="btn btn-primary stretched-link" href="/veranstaltungen/{{ event.slug }}/anmeldung?shift_id={{ shift.id }}#registration-form">Für diese Schicht anmelden</a>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </article>
+      {% else %}
+        <p class="alert alert-info">Für diese Filter gibt es derzeit keine offenen Schichten.</p>
+      {% endfor %}
+    </section>
+  </main>
+
+  <aside class="col-lg-4">
+    <div class="card mb-3"><div class="card-body"><h2 class="h5">Wann und wo?</h2>{% if event.starts_at %}<p>{{ event.starts_at.strftime('%d.%m.%Y %H:%M') }}{% if event.ends_at %}<br>bis {{ event.ends_at.strftime('%d.%m.%Y %H:%M') }}{% endif %}</p>{% endif %}{% if event.venue %}<p><strong>{{ event.venue }}</strong>{% if event.address %}<br>{{ event.address }}{% endif %}</p>{% endif %}{% if event.public_meeting_point %}<p>Treffpunkt: {{ event.public_meeting_point }}</p>{% endif %}<p><strong>Altersfreigabe:</strong> {{ 'U18-Teilnahme möglich; bitte Schichtfreigaben beachten' if event.allows_minors else 'Teilnahme ab 18 Jahren' }}</p></div></div>
+    {% if event.briefing or event.clothing_and_material or event.catering_info or event.accessibility_info %}<div class="card mb-3"><div class="card-body"><h2 class="h5">Gut zu wissen</h2>{% if event.briefing %}<h3 class="h6">Briefing</h3><p style="white-space:pre-line">{{ event.briefing }}</p>{% endif %}{% if event.clothing_and_material %}<h3 class="h6">Kleidung & Material</h3><p style="white-space:pre-line">{{ event.clothing_and_material }}</p>{% endif %}{% if event.catering_info %}<h3 class="h6">Verpflegung</h3><p style="white-space:pre-line">{{ event.catering_info }}</p>{% endif %}{% if event.accessibility_info %}<h3 class="h6">Barrierefreiheit</h3><p style="white-space:pre-line">{{ event.accessibility_info }}</p>{% endif %}</div></div>{% endif %}
+    {% if event.contact_name or event.contact_email or event.contact_phone %}<div class="card mb-3"><div class="card-body"><h2 class="h5">Kontakt</h2><p>{{ event.contact_name or '' }}{% if event.contact_email %}<br><a href="mailto:{{ event.contact_email }}">{{ event.contact_email }}</a>{% endif %}{% if event.contact_phone %}<br>{{ event.contact_phone }}{% endif %}</p></div></div>{% endif %}
+    <a class="btn btn-primary btn-lg w-100" href="/veranstaltungen/{{ event.slug }}/anmeldung{% if request.url.query %}?{{ request.url.query }}{% endif %}">Mehrere Schichten auswählen</a>
+  </aside>
+</div>
 {% endblock %}

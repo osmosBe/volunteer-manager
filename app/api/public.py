@@ -31,6 +31,62 @@ templates = Jinja2Templates(directory="app/templates")
 DatabaseSession = Annotated[Session, Depends(get_db)]
 
 
+def _parse_birth_date(value: str) -> date:
+    try:
+        parsed = date.fromisoformat(value)
+    except ValueError as exc:
+        raise RegistrationError("Bitte gib ein gültiges Geburtsdatum an.") from exc
+    return parsed
+
+
+def _parse_shift_ids(values: list[str] | None) -> list[int]:
+    try:
+        return [int(value) for value in values or []]
+    except (TypeError, ValueError) as exc:
+        raise RegistrationError(
+            "Mindestens eine ausgewählte Schicht ist ungültig."
+        ) from exc
+
+
+def _registration_form_context(
+    db: Session,
+    event: Event,
+    *,
+    team_id: int | None = None,
+    day: date | None = None,
+    time_from: time | None = None,
+    time_to: time | None = None,
+    available_only: bool = False,
+    selected_shift_ids: set[int] | None = None,
+    form_values: dict[str, str | bool] | None = None,
+    error: str | None = None,
+) -> dict:
+    shifts, places = filtered_open_shifts(
+        db,
+        event,
+        team_id=team_id,
+        day=day,
+        time_from=time_from,
+        time_to=time_to,
+        available_only=available_only,
+    )
+    return {
+        "event": event,
+        "shifts": shifts,
+        "places": places,
+        "filters": {
+            "team_id": team_id,
+            "day": day,
+            "time_from": time_from,
+            "time_to": time_to,
+            "available_only": available_only,
+        },
+        "selected_shift_ids": selected_shift_ids or set(),
+        "form_values": form_values or {},
+        "error": error,
+    }
+
+
 def public_events(db: Session) -> list[Event]:
     return list(
         db.scalars(
@@ -137,33 +193,29 @@ def registration_form(
     time_from: time | None = None,
     time_to: time | None = None,
     available_only: bool = False,
+    shift_id: int | None = None,
 ):
     event = get_public_event(db, slug)
-    shifts, places = filtered_open_shifts(
-        db,
-        event,
-        team_id=team_id,
-        day=day,
-        time_from=time_from,
-        time_to=time_to,
-        available_only=available_only,
-    )
+    selected_shift_ids = {
+        shift.id
+        for shift in event.shifts
+        if shift.id == shift_id
+        and shift.status == ShiftStatus.open
+        and (available_places(db, shift) > 0 or shift.waitlist_capacity is not None)
+    }
     return templates.TemplateResponse(
         request,
         "registration_form.html",
-        {
-            "event": event,
-            "shifts": shifts,
-            "places": places,
-            "filters": {
-                "team_id": team_id,
-                "day": day,
-                "time_from": time_from,
-                "time_to": time_to,
-                "available_only": available_only,
-            },
-            "error": None,
-        },
+        _registration_form_context(
+            db,
+            event,
+            team_id=team_id,
+            day=day,
+            time_from=time_from,
+            time_to=time_to,
+            available_only=available_only,
+            selected_shift_ids=selected_shift_ids,
+        ),
     )
 
 
@@ -172,18 +224,33 @@ def submit_registration(
     slug: str,
     request: Request,
     db: DatabaseSession,
-    first_name: Annotated[str, Form()],
-    last_name: Annotated[str, Form()],
-    email: Annotated[str, Form()],
+    first_name: Annotated[str, Form()] = "",
+    last_name: Annotated[str, Form()] = "",
+    email: Annotated[str, Form()] = "",
     contact_consent: Annotated[bool, Form()] = False,
-    shift_ids: Annotated[list[int] | None, Form()] = None,
+    shift_ids: Annotated[list[str] | None, Form()] = None,
     phone: Annotated[str | None, Form()] = None,
     pronouns: Annotated[str | None, Form()] = None,
-    birth_date: Annotated[date, Form()] = ...,
+    birth_date: Annotated[str, Form()] = "",
     future_contact_consent: Annotated[bool, Form()] = False,
 ):
     event = get_public_event(db, slug)
+    form_values: dict[str, str | bool] = {
+        "first_name": first_name,
+        "last_name": last_name,
+        "email": email,
+        "birth_date": birth_date,
+        "phone": phone or "",
+        "pronouns": pronouns or "",
+        "contact_consent": contact_consent,
+        "future_contact_consent": future_contact_consent,
+    }
+    selected_shift_ids = {
+        int(value) for value in shift_ids or [] if str(value).isdigit()
+    }
     try:
+        parsed_shift_ids = _parse_shift_ids(shift_ids)
+        parsed_birth_date = _parse_birth_date(birth_date)
         result = create_registration(
             db,
             event,
@@ -193,24 +260,23 @@ def submit_registration(
                 email=email,
                 phone=phone,
                 pronouns=pronouns,
-                birth_date=birth_date,
+                birth_date=parsed_birth_date,
                 contact_consent=contact_consent,
                 future_contact_consent=future_contact_consent,
             ),
-            shift_ids or [],
+            parsed_shift_ids,
         )
     except RegistrationError as exc:
-        shifts, places = filtered_open_shifts(db, event)
         return templates.TemplateResponse(
             request,
             "registration_form.html",
-            {
-                "event": event,
-                "shifts": shifts,
-                "places": places,
-                "filters": {},
-                "error": str(exc),
-            },
+            _registration_form_context(
+                db,
+                event,
+                selected_shift_ids=selected_shift_ids,
+                form_values=form_values,
+                error=str(exc),
+            ),
             status_code=422,
         )
     send_pending_automatic_messages(db, result.volunteer.id)

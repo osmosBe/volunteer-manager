@@ -43,11 +43,45 @@ def test_public_registration_and_cancellation_flow(tmp_path):
     try:
         client = TestClient(app)
         assert client.get("/").status_code == 200
+        event_page = client.get("/veranstaltungen/stpride-test")
+        assert event_page.status_code == 200
+        assert (
+            f"/veranstaltungen/stpride-test/anmeldung?shift_id={shift_id}#registration-form"
+            in event_page.text
+        )
+        direct_registration = client.get(
+            f"/veranstaltungen/stpride-test/anmeldung?shift_id={shift_id}"
+        )
+        assert direct_registration.status_code == 200
+        assert re.search(
+            rf'id="shift-{shift_id}"[^>]*checked', direct_registration.text
+        )
         assert client.get("/veranstaltungen/stpride-test/anmeldung").status_code == 200
         assert (
             "Zusammenfassung vor dem Absenden"
             in client.get("/veranstaltungen/stpride-test/anmeldung").text
         )
+        invalid = client.post(
+            "/veranstaltungen/stpride-test/anmeldung",
+            data={
+                "first_name": "Alex",
+                "last_name": "Muster",
+                "email": "alex@example.org",
+                "birth_date": "kein-datum",
+                "contact_consent": "true",
+                "shift_ids": str(shift_id),
+            },
+        )
+        assert invalid.status_code == 422
+        assert "Bitte gib ein gültiges Geburtsdatum an." in invalid.text
+        assert "data-server-error" in invalid.text
+        assert 'name="first_name" value="Alex"' in invalid.text
+        assert 'name="last_name" value="Muster"' in invalid.text
+        assert 'name="email" value="alex@example.org"' in invalid.text
+        assert 'name="birth_date" value="kein-datum"' in invalid.text
+        assert re.search(rf'id="shift-{shift_id}"[^>]*checked', invalid.text)
+        assert 'id="contact_consent"' in invalid.text
+        assert re.search(r'id="contact_consent"[^>]*checked', invalid.text)
         response = client.post(
             "/veranstaltungen/stpride-test/anmeldung",
             data={

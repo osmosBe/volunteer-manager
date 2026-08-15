@@ -21,6 +21,15 @@ vollständige Schichtauswahl ändern; entfernte Zuteilungen werden nachvollziehb
 storniert und erneut gewählte, zuvor stornierte Zuteilungen werden reaktiviert.
 Die Bearbeitung verwendet denselben Kapazitäts-, Wartelisten- und
 Überschneidungscheck wie die Erstanmeldung.
+Pflichtfelder, E-Mail-Format, Geburtsdatum, Altersfreigabe, Schichtauswahl,
+Zeitüberschneidungen und Einwilligung werden bereits während der Eingabe im
+Browser geprüft. Alle Hinweise erscheinen gesammelt in der roten Fehlerbox am
+Formularanfang; die serverseitige Prüfung bleibt maßgeblich und rendert bei
+einem Fehler sämtliche eingegebenen Werte, Einwilligungen und ausgewählten
+Schichten erneut. Auf der öffentlichen Veranstaltungsseite ist jede verfügbare
+Schicht vollständig anklickbar und besitzt einen eindeutigen Anmeldebutton, der
+das Formular mit dieser Schicht vorausgewählt öffnet. Weitere Schichten können
+dort weiterhin ergänzt werden.
 Das Geburtsdatum ist in der öffentlichen Anmeldung verpflichtend und wird für
 die Altersprüfung zum Beginn der Veranstaltung verwendet. Standardmäßig sind
 Veranstaltungen ab 18; die Administration kann U18-Teilnahme pro Veranstaltung

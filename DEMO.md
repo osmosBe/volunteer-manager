@@ -4,10 +4,13 @@ Use fictional data only. With non-persistent DEV storage, run migrations and
 `python -m scripts.seed_default_event` in the active revision before the demo.
 
 1. Open `/` and select **St. Pölten PRIDE 2026**.
-2. Filter shifts by work area, day or free capacity, then register a fictional
-   `example.invalid` contact for two compatible shifts. Show the review summary,
-   confirmation, e-mail verification state and edit link. For a live mail demo,
-   use an authorized test mailbox and explicitly configured SMTP credentials.
+2. Click a shift card or its **Für diese Schicht anmelden** button and verify
+   that the registration form opens with that shift selected. Briefly enter an
+   invalid e-mail address to show immediate validation in the central error box,
+   then register a fictional `example.invalid` contact for two compatible
+   shifts. Show the review summary, confirmation, e-mail verification state and
+   edit link. For a live mail demo, use an authorized test mailbox and
+   explicitly configured SMTP credentials.
 3. Use the edit link to change one shift and cancel one assignment. Explain
    that only token hashes are stored and a changed e-mail address requires a new
    confirmation.

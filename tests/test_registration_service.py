@@ -205,6 +205,23 @@ def test_event_and_shift_minor_rules_use_age_at_event_date(db):
     assert result.volunteer.age_group == AgeGroup.age_16_17
 
 
+def test_future_birth_date_is_rejected_even_before_event_date(db):
+    event, first, _ = make_event_and_shifts(db)
+    event.allows_minors = True
+    first.allows_minors = True
+    db.commit()
+    future_data = RegistrationData(
+        first_name="Noch",
+        last_name="Nicht geboren",
+        email="future@example.org",
+        birth_date=date.today() + timedelta(days=1),
+        contact_consent=True,
+    )
+
+    with pytest.raises(RegistrationError, match="Zukunft"):
+        create_registration(db, event, future_data, [first.id])
+
+
 def test_cancelling_assignment_keeps_history_and_frees_capacity(db):
     event, first, _ = make_event_and_shifts(db, needed_count=1)
     result = create_registration(db, event, registration_data(), [first.id])
