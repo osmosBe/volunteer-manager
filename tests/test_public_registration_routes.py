@@ -145,7 +145,9 @@ def test_public_event_content_and_shift_filters(tmp_path):
     engine = create_database_engine(f"sqlite:///{tmp_path / 'filters.db'}")
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine)
-    start = datetime.now(timezone.utc) + timedelta(days=2)
+    start = (datetime.now(timezone.utc) + timedelta(days=2)).replace(
+        hour=10, minute=0, second=0, microsecond=0
+    )
     with Session() as db:
         event = Event(
             name="Filterbare PRIDE",

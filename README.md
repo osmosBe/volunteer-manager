@@ -237,10 +237,12 @@ production environments should use `AUTH_MODE=easyauth`.
 4. Push or merge the completed change to `dev`.
 5. CI runs Black, Ruff, pytest, SQLite migration checks, a disposable PostgreSQL
    16 migration test, Bicep compilation and PowerShell parse validation.
-6. Only after CI succeeds, the DEV workflow builds/pushes the commit image,
-   deploys the revision, runs the same image as the Alembic job, waits for job
-   success, optionally runs the demo seed as a separate job, and verifies the
-   exact commit SHA, liveness and DB readiness.
+6. The `dev` push workflow calls the reusable DEV deployment only after its
+   test, PostgreSQL migration and infrastructure jobs all succeed. It then
+   builds/pushes the exact tested commit image, deploys the revision, runs the
+   same image as the Alembic job, waits for job success, optionally runs the
+   demo seed as a separate job, and verifies the exact commit SHA, liveness and
+   DB readiness.
 
 Migration failure fails the GitHub deployment. It does not silently start a web
 container that mutates its own schema.
