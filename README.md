@@ -318,7 +318,7 @@ Required runtime variables:
 | Variable | Description |
 | --- | --- |
 | `APP_BASE_URL` | Public base URL for the running app. |
-| `AUTH_MODE` | Use `easyauth` in Azure Container Apps. Use `disabled` only for local development. |
+| `AUTH_MODE` | Use `easyauth` in Azure Container Apps. Use `disabled` only for local development. The legacy value `disable` remains accepted for existing DEV revisions. |
 | `DEBUG` | Enables temporary DEV troubleshooting endpoints when `true`. Keep unset or `false` in production. |
 | `ADMIN_ALLOWED_EMAILS` | Comma-separated administrator email allowlist. Useful for DEV. |
 | `ADMIN_ALLOWED_GROUP_IDS` | Comma-separated administrator Entra group object ID allowlist. |

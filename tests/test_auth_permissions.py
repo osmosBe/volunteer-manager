@@ -170,3 +170,11 @@ def test_auth_mode_disabled_grants_all_permissions():
     settings = Settings(auth_mode="disabled", permissions_config_path="missing.yaml")
 
     assert has_permission(None, "anything", settings)
+
+
+def test_legacy_disable_auth_mode_is_normalized(monkeypatch):
+    monkeypatch.setenv("AUTH_MODE", "disable")
+
+    settings = Settings(permissions_config_path="missing.yaml")
+
+    assert settings.auth_mode == "disabled"
