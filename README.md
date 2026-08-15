@@ -1,10 +1,25 @@
-# ST. PRIDE Volunteer Management
+# ST. PRIDE Volunteer Manager
+
+## Implementierungsstand
+
+Der aktuelle Entwicklungsstand enthält das persistente Fachmodell sowie den
+getesteten Service für öffentliche Anmeldungen. Dieser prüft Anmeldezeiträume,
+offene Schichten, doppelte Auswahl, zeitliche Überschneidungen, Kapazität und
+Warteliste. Jede Anmeldung erhält einen kryptographisch zufälligen
+Bearbeitungs-Token; in der Datenbank wird ausschließlich dessen SHA-256-Hash
+gespeichert. Bestätigungs- und Stornierungsnachrichten werden als persistente
+Outbox-Vorschau angelegt und nicht versendet.
+
+Die HTTP-Oberflächen für Registrierung, Bearbeitung und Administration folgen
+in den nächsten Etappen. Bis dahin lässt sich der Ablauf über die automatisierten
+Tests nachvollziehen (`pytest tests/test_registration_service.py`).
 
 ST. PRIDE Volunteer Management is an open-source, lightweight volunteer management application foundation. This milestone provides only the production-ready project scaffold for a future FastAPI application that can run in Azure Container Apps.
 
-No volunteer management business logic, authentication flow, or Microsoft Entra ID integration is implemented yet.
-
-This is repo is still testing and not at all production.!
+Die Anwendung befindet sich im Prototyping. Die vorhandene Azure Container Apps
+EasyAuth-Integration bleibt erhalten; `AUTH_MODE=disabled` ist ausschließlich
+für die lokale bzw. ausdrücklich freigegebene Prototyp-Entwicklung gedacht.
+Der aktuelle Stand ist nicht als öffentliches Produktivsystem freigegeben.
 
 ## Technology Stack
 
