@@ -26,6 +26,7 @@ from app.models import (
     AgeGroup,
     AssignmentStatus,
     Briefing,
+    BriefingConfirmation,
     Event,
     EventStatus,
     OutboxMessage,
@@ -37,6 +38,7 @@ from app.models import (
     Team,
     TeamMaterial,
     Volunteer,
+    VolunteerStatus,
 )
 from app.services.admin import (
     AdminWorkflowError,
@@ -974,9 +976,110 @@ def volunteer_list(
             "event_id": event_id,
             "assignment_status": assignment_status,
             "assignment_statuses": list(AssignmentStatus),
+            "volunteer_statuses": list(VolunteerStatus),
+            "briefings": list(db.scalars(select(Briefing).order_by(Briefing.title))),
             "u18": u18,
         },
     )
+
+
+@app.post("/admin/ehrenamtliche/bulk", tags=["admin"])
+def volunteer_bulk_action(
+    db: Session = db_dependency,
+    admin_user=admin_dependency,
+    volunteer_ids: Annotated[list[int] | None, Form()] = None,
+    bulk_choice: Annotated[str, Form()] = "",
+):
+    selected_ids = list(dict.fromkeys(volunteer_ids or []))
+    if not selected_ids:
+        raise HTTPException(status_code=422, detail="Bitte Personen auswählen.")
+    volunteers = list(
+        db.scalars(select(Volunteer).where(Volunteer.id.in_(selected_ids)))
+    )
+    if len(volunteers) != len(selected_ids):
+        raise HTTPException(
+            status_code=422, detail="Auswahl enthält ungültige Personen."
+        )
+    if "|" not in bulk_choice:
+        raise HTTPException(status_code=422, detail="Bitte eine Bulk-Aktion auswählen.")
+    action, value = bulk_choice.split("|", 1)
+    if action == "volunteer_status":
+        try:
+            new_status = VolunteerStatus(value)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422, detail="Ungültiger Personenstatus."
+            ) from exc
+        for volunteer in volunteers:
+            volunteer.status = new_status
+            record_audit(
+                db,
+                action="volunteer.bulk_status_changed",
+                entity_type="volunteer",
+                entity_id=volunteer.id,
+                changes={"status": new_status.value},
+            )
+    elif action == "assignment_status":
+        try:
+            new_status = AssignmentStatus(value)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422, detail="Ungültiger Zuteilungsstatus."
+            ) from exc
+        if new_status == AssignmentStatus.checked_in:
+            raise HTTPException(
+                status_code=422, detail="Check-in ist nicht als Bulk-Aktion zulässig."
+            )
+        for volunteer in volunteers:
+            for assignment in volunteer.assignments:
+                if assignment.assignment_status != AssignmentStatus.cancelled:
+                    assignment.assignment_status = new_status
+                    record_audit(
+                        db,
+                        action="assignment.bulk_status_changed",
+                        entity_type="shift_assignment",
+                        entity_id=assignment.id,
+                        changes={"status": new_status.value},
+                    )
+    elif action == "briefing_confirm":
+        try:
+            briefing_id = int(value)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail="Ungültiges Briefing.") from exc
+        briefing = db.get(Briefing, briefing_id)
+        if briefing is None:
+            raise HTTPException(status_code=404)
+        for volunteer in volunteers:
+            if volunteer.event_id != briefing.event_id:
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        "Alle Personen müssen zur Veranstaltung des Briefings gehören."
+                    ),
+                )
+            exists = db.scalar(
+                select(BriefingConfirmation).where(
+                    BriefingConfirmation.briefing_id == briefing.id,
+                    BriefingConfirmation.volunteer_id == volunteer.id,
+                )
+            )
+            if not exists:
+                db.add(
+                    BriefingConfirmation(
+                        briefing_id=briefing.id, volunteer_id=volunteer.id
+                    )
+                )
+                record_audit(
+                    db,
+                    action="briefing.bulk_confirmed",
+                    entity_type="volunteer",
+                    entity_id=volunteer.id,
+                    changes={"briefing_id": briefing.id},
+                )
+    else:
+        raise HTTPException(status_code=422, detail="Unbekannte Bulk-Aktion.")
+    db.commit()
+    return RedirectResponse(url="/admin/ehrenamtliche", status_code=303)
 
 
 @app.get("/admin/ehrenamtliche/neu", tags=["admin"])
