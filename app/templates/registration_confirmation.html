@@ -1,6 +1,15 @@
 {% extends "base.html" %}
 {% block content %}
   <h1>Danke für deine Anmeldung, {{ volunteer.first_name }}!</h1>
+  {% if volunteer.email_verified_at %}
+    <p class="alert alert-success">Deine E-Mail-Adresse ist bestätigt.</p>
+  {% else %}
+    <p class="alert alert-warning">
+      Bitte bestätige deine E-Mail-Adresse über den Link in der Bestätigungsmail.
+      Falls SMTP noch nicht aktiviert ist, liegt die Nachricht für das Organisationsteam
+      in der Admin-Outbox bereit.
+    </p>
+  {% endif %}
   <p>Bewahre diesen Link auf: Darüber kannst du deine Daten und Schichten bearbeiten.</p>
   <p><a class="btn btn-primary" href="/anmeldung/{{ token }}/bearbeiten">Anmeldung bearbeiten</a></p>
   <h2 class="h3">Deine Schichten</h2>

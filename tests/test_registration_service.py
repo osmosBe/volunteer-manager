@@ -1,3 +1,4 @@
+import re
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -22,6 +23,7 @@ from app.services.registrations import (
     create_registration,
     get_volunteer_by_edit_token,
     update_registration,
+    verify_email_token,
 )
 
 
@@ -92,6 +94,49 @@ def test_registration_confirms_available_shifts_and_stores_only_token_hash(db):
     )
     assert get_volunteer_by_edit_token(db, result.edit_token).id == result.volunteer.id
     assert get_volunteer_by_edit_token(db, "not-a-real-token") is None
+
+
+def test_email_verification_is_one_time_and_records_confirmation(db):
+    event, first, _ = make_event_and_shifts(db)
+    result = create_registration(db, event, registration_data(), [first.id])
+    message = db.scalar(
+        select(OutboxMessage).where(
+            OutboxMessage.volunteer_id == result.volunteer.id,
+            OutboxMessage.kind == "email_verification",
+        )
+    )
+    token_match = re.search(r"email-bestaetigen/([A-Za-z0-9_-]+)", message.body)
+    assert token_match is not None
+    token = token_match.group(1)
+    assert result.volunteer.email_verified_at is None
+    assert result.volunteer.email_verification_token_hash != token
+
+    verified = verify_email_token(db, token)
+
+    assert verified is not None
+    assert verified.email_verified_at is not None
+    assert verified.email_verification_token_hash is None
+    assert verify_email_token(db, token) is None
+
+
+def test_expired_email_verification_token_is_rejected(db):
+    event, first, _ = make_event_and_shifts(db)
+    result = create_registration(db, event, registration_data(), [first.id])
+    message = db.scalar(
+        select(OutboxMessage).where(
+            OutboxMessage.volunteer_id == result.volunteer.id,
+            OutboxMessage.kind == "email_verification",
+        )
+    )
+    token_match = re.search(r"email-bestaetigen/([A-Za-z0-9_-]+)", message.body)
+    assert token_match is not None
+    result.volunteer.email_verification_sent_at = datetime.now(
+        timezone.utc
+    ) - timedelta(hours=73)
+    db.commit()
+
+    assert verify_email_token(db, token_match.group(1)) is None
+    assert result.volunteer.email_verification_token_hash is None
 
 
 def test_registration_uses_waitlist_when_shift_is_full(db):
@@ -172,6 +217,17 @@ def test_update_registration_replaces_shifts_and_updates_contact_data(db):
     assert volunteer.email == "sam@example.org"
     assert volunteer.phone == "+43 123"
     assert volunteer.future_contact_consent is True
+    assert volunteer.email_verified_at is None
+    assert volunteer.email_verification_token_hash is not None
+    verification_messages = list(
+        db.scalars(
+            select(OutboxMessage).where(
+                OutboxMessage.volunteer_id == volunteer.id,
+                OutboxMessage.kind == "email_verification",
+            )
+        )
+    )
+    assert len(verification_messages) == 2
 
 
 def test_update_registration_revives_a_cancelled_assignment(db):

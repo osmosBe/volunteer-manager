@@ -290,6 +290,13 @@ class Volunteer(TimestampMixin, Base):
     edit_token_revoked_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True)
     )
+    email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    email_verification_token_hash: Mapped[str | None] = mapped_column(
+        String(128), unique=True, index=True
+    )
+    email_verification_sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
     anonymized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[VolunteerStatus] = mapped_column(
         SAEnum(VolunteerStatus, native_enum=False),

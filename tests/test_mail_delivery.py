@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
 
+from app.api.public import send_pending_email_verification
 from app.config.settings import get_settings
 from app.database.base import Base
 from app.database.session import create_database_engine, get_db
@@ -136,5 +137,36 @@ def test_outbox_delivery_uses_environment_password(monkeypatch, tmp_path):
         assert message.sent_at is not None
         assert len(FakeSMTP.sent_messages) == 1
         assert FakeSMTP.sent_messages[0]["To"] == "recipient@example.org"
+    monkeypatch.delenv("SMTP_PASSWORD")
+    get_settings.cache_clear()
+
+
+def test_enabled_smtp_automatically_sends_pending_verification(monkeypatch, tmp_path):
+    Session = build_mail_database(tmp_path)
+    monkeypatch.setenv("SMTP_PASSWORD", "secret")
+    get_settings.cache_clear()
+    monkeypatch.setattr("app.services.mail_delivery.smtplib.SMTP", FakeSMTP)
+    FakeSMTP.sent_messages.clear()
+    with Session() as db:
+        db.add(
+            SMTPConfiguration(
+                host="smtp.example.org",
+                port=587,
+                username="mailer",
+                from_email="volunteer@example.org",
+                from_name="ST. PRIDE",
+                use_starttls=True,
+                enabled=True,
+            )
+        )
+        message = add_message(db)
+        message.kind = "email_verification"
+        db.commit()
+
+        send_pending_email_verification(db, message.volunteer_id)
+
+        db.refresh(message)
+        assert message.sent_at is not None
+        assert len(FakeSMTP.sent_messages) == 1
     monkeypatch.delenv("SMTP_PASSWORD")
     get_settings.cache_clear()

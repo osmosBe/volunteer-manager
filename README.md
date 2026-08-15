@@ -7,8 +7,10 @@ getesteten Service für öffentliche Anmeldungen. Dieser prüft Anmeldezeiträum
 offene Schichten, doppelte Auswahl, zeitliche Überschneidungen, Kapazität und
 Warteliste. Jede Anmeldung erhält einen kryptographisch zufälligen
 Bearbeitungs-Token; in der Datenbank wird ausschließlich dessen SHA-256-Hash
-gespeichert. Bestätigungs- und Stornierungsnachrichten werden als persistente
-Outbox-Vorschau angelegt und nicht versendet.
+gespeichert. Nachrichten werden zuerst in der persistenten Outbox angelegt. Bei
+aktivierter SMTP-Konfiguration wird die E-Mail-Bestätigung automatisch
+zugestellt; weitere Nachrichten bleiben bis zum ausdrücklichen Versand durch die
+Administration in der Outbox.
 
 Die HTTP-Oberfläche für die öffentliche Anmeldung ist unter
 `/veranstaltungen/<slug>/anmeldung` vorhanden. Sie benötigt eine als öffentlich
@@ -19,6 +21,14 @@ vollständige Schichtauswahl ändern; entfernte Zuteilungen werden nachvollziehb
 storniert und erneut gewählte, zuvor stornierte Zuteilungen werden reaktiviert.
 Die Bearbeitung verwendet denselben Kapazitäts-, Wartelisten- und
 Überschneidungscheck wie die Erstanmeldung.
+
+Zusätzlich zur serverseitigen Syntaxprüfung verwendet jede öffentliche Anmeldung
+ein Double-Opt-in: Ein zufälliger Einmal-Token wird ausschließlich gehasht
+gespeichert und bestätigt die E-Mail-Adresse über
+`/anmeldung/email-bestaetigen/<token>`. Der Link ist 72 Stunden gültig. Eine
+geänderte Adresse setzt den Status zurück und erzeugt einen neuen
+Bestätigungslink. Der Bestätigungsstatus ist in der Admin-Personenliste sichtbar
+und filterbar.
 
 Die öffentliche Veranstaltungsseite ist im Adminbereich mit Kurz- und
 Langbeschreibung, Ort, Adresse, Treffpunkt, Anmeldezeitraum, Kontakt,
@@ -60,7 +70,8 @@ CSV-Exporte sind zweckgebunden pro Veranstaltung verfügbar: Kontaktliste unter
 `/admin/export/veranstaltungen/<id>/schichten.csv`. Sensible Freitexte werden
 nicht exportiert.
 
-Die Personenliste bietet Veranstaltungs-, Zuteilungsstatus- und U18-Filter. Die
+Die Personenliste bietet Veranstaltungs-, Zuteilungsstatus-, E-Mail-Bestätigungs-
+und U18-Filter. Die
 Verwaltung kann Personen manuell anlegen und ihnen Schichten als bestätigt,
 offen oder Warteliste zuweisen. Zeitüberschneidungen benötigen eine ausdrückliche
 zweite Bestätigung; volle Schichten können nicht versehentlich überbucht werden.
@@ -79,8 +90,12 @@ E-Mail-Adressen werden serverseitig nach gängigen Syntaxregeln validiert;
 `/admin/einstellungen/smtp` verwaltet die Administration Host, Port,
 Benutzername, Absender, TLS-Modus und Aktivstatus. Das Passwort wird
 ausschließlich aus `SMTP_PASSWORD` gelesen und nie in SQLite gespeichert.
-Outbox-Nachrichten werden erst nach einem ausdrücklichen Admin-Klick versendet;
-Fehler- und Versandstatus bleiben nachvollziehbar.
+Double-Opt-in-Nachrichten werden bei aktivierter Konfiguration direkt aus der
+Outbox versendet. Ist SMTP deaktiviert oder vorübergehend nicht erreichbar,
+bleibt die Anmeldung trotzdem erhalten und die Nachricht kann im Adminbereich
+erneut versendet werden. Andere Outbox-Nachrichten werden erst nach einem
+ausdrücklichen Admin-Klick versendet; Fehler- und Versandstatus bleiben
+nachvollziehbar.
 
 ## Technology Stack
 

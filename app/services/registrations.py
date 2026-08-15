@@ -8,7 +8,7 @@ on the same data-integrity rules.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from hashlib import sha256
 from secrets import token_urlsafe
 
@@ -44,6 +44,7 @@ ACTIVE_ASSIGNMENT_STATUSES = (
     AssignmentStatus.checked_in,
     AssignmentStatus.attended,
 )
+EMAIL_VERIFICATION_TTL = timedelta(hours=72)
 
 
 @dataclass(frozen=True)
@@ -76,6 +77,39 @@ class RegistrationResult:
 
 def hash_edit_token(token: str) -> str:
     return sha256(token.encode("utf-8")).hexdigest()
+
+
+def issue_email_verification_token(volunteer: Volunteer) -> str:
+    token = token_urlsafe(32)
+    volunteer.email_verified_at = None
+    volunteer.email_verification_token_hash = hash_edit_token(token)
+    volunteer.email_verification_sent_at = utcnow()
+    return token
+
+
+def verify_email_token(db: Session, token: str) -> Volunteer | None:
+    if not token:
+        return None
+    volunteer = db.scalar(
+        select(Volunteer).where(
+            Volunteer.email_verification_token_hash == hash_edit_token(token)
+        )
+    )
+    if volunteer is None:
+        return None
+    if volunteer.email_verification_sent_at is None or (
+        utcnow() - _as_utc(volunteer.email_verification_sent_at)
+        > EMAIL_VERIFICATION_TTL
+    ):
+        volunteer.email_verification_token_hash = None
+        volunteer.email_verification_sent_at = None
+        db.commit()
+        return None
+    volunteer.email_verified_at = utcnow()
+    volunteer.email_verification_token_hash = None
+    volunteer.email_verification_sent_at = None
+    db.commit()
+    return volunteer
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -219,6 +253,7 @@ def create_registration(
         experience=data.experience,
         notes=data.notes,
     )
+    verification_token = issue_email_verification_token(volunteer)
     db.add(volunteer)
     db.flush()
 
@@ -239,12 +274,15 @@ def create_registration(
     db.add(
         OutboxMessage(
             volunteer_id=volunteer.id,
-            kind="registration_confirmation",
-            subject=f"Deine Anmeldung für {event.name}",
+            kind="email_verification",
+            subject=f"E-Mail für {event.name} bestätigen",
             body=(
                 f"Hallo {volunteer.first_name},\n\n"
                 f"deine Anmeldung für {event.name} wurde erfasst. "
-                "Du kannst sie über diesen persönlichen Link ansehen und ändern:\n"
+                "Bitte bestätige deine E-Mail-Adresse über diesen Link:\n"
+                f"{get_settings().app_base_url.rstrip('/')}/anmeldung/"
+                f"email-bestaetigen/{verification_token}\n\n"
+                "Dein persönlicher Bearbeitungslink:\n"
                 f"{get_settings().app_base_url.rstrip('/')}/anmeldung/"
                 f"{edit_token}/bestaetigung\n\nST. PRIDE"
             ),
@@ -336,6 +374,7 @@ def update_registration(
         db.add(assignment)
         assignments.append(assignment)
 
+    previous_email = volunteer.email_normalized
     try:
         email = validate_email_address(data.email)
     except EmailAddressError as exc:
@@ -359,6 +398,22 @@ def update_registration(
             recipient_email=email,
         )
     )
+    if email != previous_email:
+        verification_token = issue_email_verification_token(volunteer)
+        db.add(
+            OutboxMessage(
+                volunteer_id=volunteer.id,
+                kind="email_verification",
+                subject="Neue E-Mail-Adresse bestätigen",
+                body=(
+                    f"Hallo {volunteer.first_name},\n\n"
+                    "bitte bestätige deine neue E-Mail-Adresse über diesen Link:\n"
+                    f"{get_settings().app_base_url.rstrip('/')}/anmeldung/"
+                    f"email-bestaetigen/{verification_token}\n\nST. PRIDE"
+                ),
+                recipient_email=email,
+            )
+        )
     db.commit()
     db.refresh(volunteer)
     return tuple(assignments)
