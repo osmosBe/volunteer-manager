@@ -31,6 +31,14 @@ def test_admin_can_create_plan_edit_and_duplicate_event(tmp_path):
                 "ends_at": (start + timedelta(hours=8)).isoformat(),
                 "status": "registration_open",
                 "is_public": "true",
+                "short_description": "Kurz und klar",
+                "description": "Ausführliche öffentliche Beschreibung",
+                "address": "Rathausplatz 1",
+                "public_meeting_point": "Infostand",
+                "contact_name": "Demo Kontakt",
+                "contact_email": "kontakt@example.org",
+                "briefing": "Sicherheitsbriefing",
+                "accessibility_info": "Stufenlos erreichbar",
             },
             follow_redirects=False,
         )
@@ -180,6 +188,10 @@ def test_admin_can_create_plan_edit_and_duplicate_event(tmp_path):
             assert db.query(TeamMaterial).one().quantity_available == 4
             assert db.query(Volunteer).count() == 1
             assert db.get(Event, event_id).status == EventStatus.registration_open
+            assert db.get(Event, event_id).description == (
+                "Ausführliche öffentliche Beschreibung"
+            )
+            assert db.get(Event, event_id).contact_email == "kontakt@example.org"
             assert db.get(Shift, shift_id).title == "Info Früh aktualisiert"
             assert db.get(Shift, shift_id).needed_count == 4
     finally:

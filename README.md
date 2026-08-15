@@ -20,6 +20,13 @@ storniert und erneut gewählte, zuvor stornierte Zuteilungen werden reaktiviert.
 Die Bearbeitung verwendet denselben Kapazitäts-, Wartelisten- und
 Überschneidungscheck wie die Erstanmeldung.
 
+Die öffentliche Veranstaltungsseite ist im Adminbereich mit Kurz- und
+Langbeschreibung, Ort, Adresse, Treffpunkt, Anmeldezeitraum, Kontakt,
+allgemeinem Briefing, Kleidung/Material, Verpflegung und Barrierefreiheit
+gestaltbar. Schichten lassen sich öffentlich nach Arbeitsbereich, Tag, Zeitraum
+und freien Plätzen filtern. Vor dem Absenden zeigt das Formular eine live
+aktualisierte, XSS-sichere Zusammenfassung der Person und Schichtauswahl.
+
 ST. PRIDE Volunteer Management is an open-source, lightweight volunteer management application foundation. This milestone provides only the production-ready project scaffold for a future FastAPI application that can run in Azure Container Apps.
 
 Die Anwendung befindet sich im Prototyping. Die vorhandene Azure Container Apps
