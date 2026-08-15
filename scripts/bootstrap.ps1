@@ -69,6 +69,22 @@ function Set-GitHubEnvironmentVariable {
     Write-Host "GitHub variable $Name is configured."
 }
 
+function Test-DatabaseSecretReference {
+    param([object]$EnvironmentVariable)
+
+    # Azure CLI omits `secretRef` entirely for ordinary value-based variables.
+    # Read the dynamic JSON properties defensively because StrictMode turns a
+    # direct access to an absent property into a terminating error.
+    $nameProperty = $EnvironmentVariable.PSObject.Properties['name']
+    $secretRefProperty = $EnvironmentVariable.PSObject.Properties['secretRef']
+    return (
+        $null -ne $nameProperty -and
+        $nameProperty.Value -eq 'DATABASE_URL' -and
+        $null -ne $secretRefProperty -and
+        -not [string]::IsNullOrWhiteSpace([string]$secretRefProperty.Value)
+    )
+}
+
 if ($ValidateOnly) {
     Write-Host "bootstrap.ps1 parsed successfully; no Azure or GitHub changes were made."
     exit 0
@@ -176,10 +192,10 @@ After the deployment succeeds, rerun bootstrap.ps1. Do not enter a PostgreSQL UR
 "@
 }
 $appDatabaseReference = @(
-    $containerApp.properties.template.containers[0].env | Where-Object { $_.name -eq "DATABASE_URL" -and $_.secretRef }
+    $containerApp.properties.template.containers[0].env | Where-Object { Test-DatabaseSecretReference $_ }
 )
 $jobDatabaseReference = @(
-    $job.properties.template.containers[0].env | Where-Object { $_.name -eq "DATABASE_URL" -and $_.secretRef }
+    $job.properties.template.containers[0].env | Where-Object { Test-DatabaseSecretReference $_ }
 )
 if ($appDatabaseReference.Count -eq 0 -or $jobDatabaseReference.Count -eq 0) {
     if ($null -eq $DatabaseUrl) {
