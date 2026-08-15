@@ -444,6 +444,55 @@ def create_team(
     return RedirectResponse(url=f"/admin/veranstaltungen/{event_id}", status_code=303)
 
 
+@app.post("/admin/bereiche/{team_id}", tags=["admin"])
+def update_team(
+    team_id: int,
+    db: Session = db_dependency,
+    admin_user=admin_dependency,
+    name: Annotated[str, Form()] = "",
+    description: Annotated[str, Form()] = "",
+    meeting_point: Annotated[str, Form()] = "",
+):
+    team = db.get(Team, team_id)
+    if team is None:
+        raise HTTPException(status_code=404)
+    if not name.strip():
+        raise HTTPException(status_code=422, detail="Bereichsname ist erforderlich")
+    team.name = name.strip()
+    team.description = description.strip() or None
+    team.meeting_point = meeting_point.strip() or None
+    record_audit(
+        db,
+        action="team.updated",
+        entity_type="team",
+        entity_id=team.id,
+        changes={"name": team.name},
+    )
+    db.commit()
+    return RedirectResponse(
+        url=f"/admin/veranstaltungen/{team.event_id}", status_code=303
+    )
+
+
+@app.post("/admin/bereiche/{team_id}/loeschen", tags=["admin"])
+def delete_empty_team(
+    team_id: int, db: Session = db_dependency, admin_user=admin_dependency
+):
+    team = db.get(Team, team_id)
+    if team is None:
+        raise HTTPException(status_code=404)
+    if any(role.shifts for role in team.roles):
+        raise HTTPException(
+            status_code=422,
+            detail="Bereiche mit verwendeten Aufgaben können nicht gelöscht werden.",
+        )
+    event_id = team.event_id
+    record_audit(db, action="team.deleted", entity_type="team", entity_id=team.id)
+    db.delete(team)
+    db.commit()
+    return RedirectResponse(url=f"/admin/veranstaltungen/{event_id}", status_code=303)
+
+
 @app.post("/admin/bereiche/{team_id}/aufgaben", tags=["admin"])
 def create_role(
     team_id: int,
@@ -465,6 +514,55 @@ def create_role(
     return RedirectResponse(
         url=f"/admin/veranstaltungen/{team.event_id}", status_code=303
     )
+
+
+@app.post("/admin/aufgaben/{role_id}", tags=["admin"])
+def update_role(
+    role_id: int,
+    db: Session = db_dependency,
+    admin_user=admin_dependency,
+    name: Annotated[str, Form()] = "",
+    description: Annotated[str, Form()] = "",
+    requirements: Annotated[str, Form()] = "",
+):
+    role = db.get(Role, role_id)
+    if role is None:
+        raise HTTPException(status_code=404)
+    if not name.strip():
+        raise HTTPException(status_code=422, detail="Aufgabenname ist erforderlich")
+    role.name = name.strip()
+    role.description = description.strip() or None
+    role.requirements = requirements.strip() or None
+    record_audit(
+        db,
+        action="role.updated",
+        entity_type="role",
+        entity_id=role.id,
+        changes={"name": role.name},
+    )
+    db.commit()
+    return RedirectResponse(
+        url=f"/admin/veranstaltungen/{role.team.event_id}", status_code=303
+    )
+
+
+@app.post("/admin/aufgaben/{role_id}/loeschen", tags=["admin"])
+def delete_unused_role(
+    role_id: int, db: Session = db_dependency, admin_user=admin_dependency
+):
+    role = db.get(Role, role_id)
+    if role is None:
+        raise HTTPException(status_code=404)
+    if role.shifts:
+        raise HTTPException(
+            status_code=422,
+            detail="Verwendete Aufgaben können nicht gelöscht werden.",
+        )
+    event_id = role.team.event_id
+    record_audit(db, action="role.deleted", entity_type="role", entity_id=role.id)
+    db.delete(role)
+    db.commit()
+    return RedirectResponse(url=f"/admin/veranstaltungen/{event_id}", status_code=303)
 
 
 @app.post("/admin/bereiche/{team_id}/materialien", tags=["admin"])
@@ -601,6 +699,101 @@ def create_shift(
     db.add(shift)
     db.flush()
     record_audit(db, action="shift.created", entity_type="shift", entity_id=shift.id)
+    db.commit()
+    return RedirectResponse(url=f"/admin/veranstaltungen/{event_id}", status_code=303)
+
+
+@app.get("/admin/schichten/{shift_id}/bearbeiten", tags=["admin"])
+def edit_shift_form(
+    shift_id: int,
+    request: Request,
+    db: Session = db_dependency,
+    admin_user=admin_dependency,
+):
+    shift = db.get(Shift, shift_id)
+    if shift is None:
+        raise HTTPException(status_code=404)
+    return templates.TemplateResponse(
+        "admin_shift_form.html",
+        {"request": request, "shift": shift, "event": shift.event, "error": None},
+    )
+
+
+@app.post("/admin/schichten/{shift_id}/bearbeiten", tags=["admin"])
+def edit_shift_submit(
+    shift_id: int,
+    request: Request,
+    db: Session = db_dependency,
+    admin_user=admin_dependency,
+    title: Annotated[str, Form()] = "",
+    starts_at: Annotated[datetime | None, Form()] = None,
+    ends_at: Annotated[datetime | None, Form()] = None,
+    needed_count: Annotated[int, Form()] = 1,
+    waitlist_capacity: Annotated[int | None, Form()] = None,
+    role_id: Annotated[int | None, Form()] = None,
+    location: Annotated[str, Form()] = "",
+    status_value: Annotated[str, Form(alias="status")] = ShiftStatus.open.value,
+):
+    shift = db.get(Shift, shift_id)
+    if shift is None:
+        raise HTTPException(status_code=404)
+    error = None
+    if not title.strip() or starts_at is None or ends_at is None:
+        error = "Titel, Beginn und Ende sind erforderlich."
+    elif ends_at <= starts_at:
+        error = "Das Ende muss nach dem Beginn liegen."
+    elif needed_count < 0 or (waitlist_capacity is not None and waitlist_capacity < 0):
+        error = "Kapazitäten dürfen nicht negativ sein."
+    role = db.get(Role, role_id) if role_id else None
+    if role is not None and role.team.event_id != shift.event_id:
+        error = "Aufgabe gehört zu einer anderen Veranstaltung."
+    try:
+        parsed_status = ShiftStatus(status_value)
+    except ValueError:
+        parsed_status = shift.status
+        error = "Ungültiger Schichtstatus."
+    if error:
+        return templates.TemplateResponse(
+            "admin_shift_form.html",
+            {"request": request, "shift": shift, "event": shift.event, "error": error},
+            status_code=422,
+        )
+    shift.title = title.strip()
+    shift.starts_at = starts_at
+    shift.ends_at = ends_at
+    shift.needed_count = needed_count
+    shift.waitlist_capacity = waitlist_capacity
+    shift.role = role
+    shift.location = location.strip() or None
+    shift.status = parsed_status
+    record_audit(
+        db,
+        action="shift.updated",
+        entity_type="shift",
+        entity_id=shift.id,
+        changes={"title": shift.title, "status": shift.status.value},
+    )
+    db.commit()
+    return RedirectResponse(
+        url=f"/admin/veranstaltungen/{shift.event_id}", status_code=303
+    )
+
+
+@app.post("/admin/schichten/{shift_id}/loeschen", tags=["admin"])
+def delete_or_cancel_shift(
+    shift_id: int, db: Session = db_dependency, admin_user=admin_dependency
+):
+    shift = db.get(Shift, shift_id)
+    if shift is None:
+        raise HTTPException(status_code=404)
+    event_id = shift.event_id
+    if shift.assignments:
+        shift.status = ShiftStatus.cancelled
+        action = "shift.cancelled_with_history"
+    else:
+        db.delete(shift)
+        action = "shift.deleted"
+    record_audit(db, action=action, entity_type="shift", entity_id=shift.id)
     db.commit()
     return RedirectResponse(url=f"/admin/veranstaltungen/{event_id}", status_code=303)
 

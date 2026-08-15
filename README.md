@@ -32,7 +32,10 @@ Anlegen, Bearbeiten, Duplizieren und Archivieren. In der Veranstaltungsansicht
 können Bereiche, Aufgaben und Schichten angelegt sowie Status und Kapazitäten
 direkt gepflegt werden. Pro Arbeitsbereich lassen sich strukturierte Materialien
 mit Bedarf, verfügbarem Bestand, Einheit, Notiz und Verbrauchskennzeichnung
-anlegen und aktualisieren. Die erste wartende Person kann kontrolliert nachrücken.
+anlegen und aktualisieren. Bereiche, Aufgaben und alle Schichtdaten können
+bearbeitet werden; unbenutzte Planungselemente lassen sich entfernen, während
+Schichten mit historischen Zuteilungen nachvollziehbar abgesagt statt gelöscht
+werden. Die erste wartende Person kann kontrolliert nachrücken.
 Zusätzlich stehen
 `/health/live` (Prozess-Liveness) und `/health/ready` (inklusive Datenbankzugriff)
 für Container-Orchestrierung zur Verfügung.
