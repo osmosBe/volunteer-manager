@@ -53,6 +53,7 @@ jobs:
       - name: Health check DEV deployment
         env:
           DEV_APP_URL: ${{ secrets.DEV_APP_URL }}
+          EXPECTED_VERSION: ${{ github.sha }}
         run: |
           if [ -z "$DEV_APP_URL" ]; then
             echo "DEV_APP_URL environment secret is required." >&2
@@ -60,11 +61,28 @@ jobs:
           fi
 
           base_url="${DEV_APP_URL%/}"
-          status_code=$(curl --silent --show-error --output /dev/null --write-out "%{http_code}" "$base_url/healthz")
+          actual_version=""
+          for attempt in $(seq 1 36); do
+            health_json=$(curl --fail --silent --show-error "$base_url/healthz" || true)
+            actual_version=$(printf '%s' "$health_json" | python -c 'import json,sys; print(json.load(sys.stdin).get("version", ""))' 2>/dev/null || true)
+            if [ "$actual_version" = "$EXPECTED_VERSION" ]; then
+              break
+            fi
+            echo "Waiting for expected revision ($attempt/36); currently '${actual_version:-unavailable}'."
+            sleep 5
+          done
 
-          if [ "$status_code" != "200" ]; then
-            echo "DEV health check failed for $base_url/healthz with HTTP $status_code." >&2
+          if [ "$actual_version" != "$EXPECTED_VERSION" ]; then
+            echo "DEV revision mismatch: expected $EXPECTED_VERSION, got ${actual_version:-unavailable}." >&2
             exit 1
           fi
 
-          echo "DEV health check passed for $base_url/healthz."
+          curl --fail --silent --show-error "$base_url/health/live" >/dev/null
+          ready_json=$(curl --fail --silent --show-error "$base_url/health/ready")
+          ready_database=$(printf '%s' "$ready_json" | python -c 'import json,sys; print(json.load(sys.stdin).get("database", ""))')
+          if [ "$ready_database" != "connected" ]; then
+            echo "DEV readiness check did not confirm database connectivity." >&2
+            exit 1
+          fi
+
+          echo "DEV revision, liveness and readiness checks passed for $EXPECTED_VERSION."

@@ -42,5 +42,6 @@ def check_out_assignment(db: Session, assignment: ShiftAssignment) -> CheckIn:
         raise CheckInError("Diese Zuteilung wurde noch nicht eingecheckt.")
     assignment.checkin.checked_out_at = utcnow()
     assignment.checkin.materials_returned_at = utcnow()
+    assignment.assignment_status = AssignmentStatus.attended
     db.commit()
     return assignment.checkin

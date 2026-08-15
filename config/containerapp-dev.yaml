@@ -1,0 +1,29 @@
+# Declarative target state for the existing DEV Container App. Values in angle
+# brackets are intentionally deployment-specific; no credentials belong here.
+name: ca-stpride-volunteer-dev
+type: Microsoft.App/containerApps
+properties:
+  managedEnvironmentId: <MANAGED_ENVIRONMENT_RESOURCE_ID>
+  configuration:
+    activeRevisionsMode: Single
+    ingress:
+      external: true
+      targetPort: 8000
+      transport: auto
+  template:
+    containers:
+      - name: volunteer-manager
+        image: <ACR_LOGIN_SERVER>/stpride-volunteer-management:<COMMIT_SHA>
+        env:
+          - name: DATABASE_URL
+            value: sqlite:////data/app.db
+        volumeMounts:
+          - volumeName: data
+            mountPath: /data
+    scale:
+      minReplicas: 1
+      maxReplicas: 1
+    volumes:
+      - name: data
+        storageType: AzureFile
+        storageName: volunteer-data-new
