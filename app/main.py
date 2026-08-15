@@ -5,7 +5,12 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import (
+    JSONResponse,
+    RedirectResponse,
+    Response,
+    StreamingResponse,
+)
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, inspect, select, text
@@ -45,6 +50,7 @@ from app.services.checkins import (
     check_in_assignment,
     check_out_assignment,
 )
+from app.services.qr_codes import qr_svg
 from app.services.volunteers import deterministic_email_hash, normalize_email
 
 admin_dependency = Depends(require_permission("admin"))
@@ -650,20 +656,77 @@ def promote_waitlist(
 
 @app.get("/admin/check-in", tags=["admin"])
 def checkin_page(
-    request: Request, db: Session = db_dependency, admin_user=admin_dependency
+    request: Request,
+    query: str = "",
+    event_id: int | None = None,
+    db: Session = db_dependency,
+    admin_user=admin_dependency,
 ):
-    assignments = list(
-        db.scalars(
-            select(ShiftAssignment).where(
-                ShiftAssignment.assignment_status.in_(
-                    [AssignmentStatus.confirmed, AssignmentStatus.checked_in]
-                )
+    statement = (
+        select(ShiftAssignment)
+        .join(Volunteer)
+        .join(Shift)
+        .where(
+            ShiftAssignment.assignment_status.in_(
+                [AssignmentStatus.confirmed, AssignmentStatus.checked_in]
             )
         )
+        .order_by(Shift.starts_at, Volunteer.last_name, Volunteer.first_name)
     )
+    if event_id is not None:
+        statement = statement.where(Shift.event_id == event_id)
+    if query.strip():
+        pattern = f"%{query.strip()}%"
+        statement = statement.where(
+            Volunteer.first_name.ilike(pattern)
+            | Volunteer.last_name.ilike(pattern)
+            | Volunteer.email.ilike(pattern)
+            | Volunteer.phone.ilike(pattern)
+        )
+    assignments = list(db.scalars(statement))
     return templates.TemplateResponse(
         "admin_checkin.html",
-        {"request": request, "assignments": assignments, "error": None},
+        {
+            "request": request,
+            "assignments": assignments,
+            "events": list(db.scalars(select(Event).order_by(Event.name))),
+            "query": query,
+            "event_id": event_id,
+            "error": None,
+        },
+    )
+
+
+@app.get("/admin/check-in/scan/{assignment_id}", tags=["admin"])
+def qr_checkin_scan(
+    assignment_id: int,
+    request: Request,
+    db: Session = db_dependency,
+    admin_user=admin_dependency,
+):
+    assignment = db.get(ShiftAssignment, assignment_id)
+    if assignment is None:
+        raise HTTPException(status_code=404)
+    return templates.TemplateResponse(
+        "admin_checkin_scan.html", {"request": request, "assignment": assignment}
+    )
+
+
+@app.get("/admin/zuteilungen/{assignment_id}/qr.svg", tags=["admin"])
+def admin_assignment_qr(
+    assignment_id: int,
+    request: Request,
+    db: Session = db_dependency,
+    admin_user=admin_dependency,
+):
+    assignment = db.get(ShiftAssignment, assignment_id)
+    if assignment is None:
+        raise HTTPException(status_code=404)
+    scan_url = str(request.url_for("qr_checkin_scan", assignment_id=assignment.id))
+    return Response(
+        content=qr_svg(scan_url),
+        media_type="image/svg+xml",
+        headers={"Cache-Control": "private, no-store"},
     )
 
 
@@ -1002,6 +1065,33 @@ def print_checkin_list(
     )
     return templates.TemplateResponse(
         "print_checkin_list.html",
+        {"request": request, "event": event, "assignments": assignments},
+    )
+
+
+@app.get("/admin/veranstaltungen/{event_id}/druck/qr-check-in", tags=["admin"])
+def print_qr_checkin_cards(
+    event_id: int,
+    request: Request,
+    db: Session = db_dependency,
+    admin_user=admin_dependency,
+):
+    event = db.get(Event, event_id)
+    if event is None:
+        raise HTTPException(status_code=404)
+    assignments = list(
+        db.scalars(
+            select(ShiftAssignment)
+            .join(Shift)
+            .where(
+                Shift.event_id == event_id,
+                ShiftAssignment.assignment_status == AssignmentStatus.confirmed,
+            )
+            .order_by(Shift.starts_at, ShiftAssignment.id)
+        )
+    )
+    return templates.TemplateResponse(
+        "print_qr_checkin_cards.html",
         {"request": request, "event": event, "assignments": assignments},
     )
 

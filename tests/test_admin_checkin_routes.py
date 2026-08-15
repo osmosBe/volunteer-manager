@@ -63,6 +63,13 @@ def test_admin_checkin_and_material_return_smoke_flow(tmp_path):
         page = client.get("/admin/check-in")
         assert page.status_code == 200
         assert "Demo Checkin" in page.text
+        scan_page = client.get(f"/admin/check-in/scan/{assignment_id}")
+        assert scan_page.status_code == 200
+        assert "QR-Check-in" in scan_page.text
+        qr_response = client.get(f"/admin/zuteilungen/{assignment_id}/qr.svg")
+        assert qr_response.status_code == 200
+        assert qr_response.headers["content-type"].startswith("image/svg+xml")
+        assert b"checkin@example.invalid" not in qr_response.content
         response = client.post(
             f"/admin/check-in/{assignment_id}",
             data={"lanyard": "true", "radio": "true"},
