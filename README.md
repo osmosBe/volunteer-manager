@@ -99,6 +99,10 @@ The DEV GitHub Actions deployment keeps the existing Azure Container Apps deploy
 
 Azure Container App ingress must target port `8000`, which is the port exposed by the application container. Before enabling SQLite-backed features, configure persistent storage mounted at `/data` so the default SQLite database path `/data/app.db` is durable across container restarts and revisions.
 
+Bei jedem Push nach `dev` baut die Pipeline die Commit-SHA als `APP_VERSION` in das
+Container-Image ein. Nach dem Deployment muss `/healthz` genau diese SHA im Feld
+`version` zurückliefern; so lässt sich die tatsächlich laufende Revision prüfen.
+
 ## Project Structure
 
 ```text
