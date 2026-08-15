@@ -3,11 +3,14 @@ import json
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import sessionmaker
 
 from app.auth.admin import is_authorized_admin
 from app.auth.easyauth import parse_easyauth_principal
 from app.auth.models import AuthenticatedUser
 from app.config.settings import Settings, get_settings, parse_csv_env
+from app.database.base import Base
+from app.database.session import create_database_engine, get_db
 from app.main import app
 
 
@@ -33,15 +36,27 @@ def test_healthz_remains_public(monkeypatch) -> None:
     assert response.json() == {"status": "ok", "version": "0.1.0"}
 
 
-def test_landing_page_is_public(monkeypatch) -> None:
+def test_landing_page_is_public(monkeypatch, tmp_path) -> None:
     _set_auth_env(monkeypatch, "easyauth")
+    engine = create_database_engine(f"sqlite:///{tmp_path / 'public.db'}")
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+
+    def override_get_db():
+        with Session() as db:
+            yield db
+
+    app.dependency_overrides[get_db] = override_get_db
     client = TestClient(app)
 
-    response = client.get("/")
+    try:
+        response = client.get("/")
+    finally:
+        app.dependency_overrides.clear()
 
     assert response.status_code == 200
-    assert "ST. PRIDE Volunteer Management" in response.text
-    assert "Admin sign in" in response.text
+    assert "Gemeinsam machen wir PRIDE möglich" in response.text
+    assert "Derzeit sind keine Anmeldungen geöffnet" in response.text
 
 
 def test_admin_denies_access_in_easyauth_mode_without_headers(monkeypatch) -> None:

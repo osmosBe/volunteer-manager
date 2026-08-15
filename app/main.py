@@ -5,6 +5,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, inspect, select, text
 from sqlalchemy.orm import Session
 
+from app.api.public import router as public_router
 from app.auth.permissions import has_permission, permission_names, require_permission
 from app.auth.provider import get_current_user
 from app.config.settings import get_settings
@@ -19,6 +20,7 @@ templates = Jinja2Templates(directory="app/templates")
 
 app = FastAPI(title=settings.app_name, version=settings.app_version)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
+app.include_router(public_router)
 
 
 @app.exception_handler(status.HTTP_401_UNAUTHORIZED)
@@ -40,11 +42,6 @@ async def forbidden_handler(request: Request, exc: HTTPException):
 @app.get("/healthz", tags=["health"])
 def healthz() -> dict[str, str]:
     return {"status": "ok", "version": settings.app_version}
-
-
-@app.get("/", tags=["public"])
-def landing_page(request: Request):
-    return templates.TemplateResponse("landing.html", {"request": request})
 
 
 @app.get("/admin", tags=["admin"])

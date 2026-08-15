@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block content %}
+  <h1>Danke für deine Anmeldung, {{ volunteer.first_name }}!</h1>
+  <p>Bewahre diesen Link auf: Darüber kannst du einzelne Schichten stornieren.</p>
+  <h2 class="h3">Deine Schichten</h2>
+  {% for assignment in volunteer.assignments %}<div class="card mb-3"><div class="card-body"><h3 class="h5">{{ assignment.shift.title }}</h3><p>{{ assignment.shift.starts_at.strftime('%d.%m.%Y %H:%M') }}–{{ assignment.shift.ends_at.strftime('%H:%M') }} Uhr</p><p>Status: {% if assignment.assignment_status.value == 'waitlisted' %}Warteliste{% elif assignment.assignment_status.value == 'cancelled' %}Storniert{% else %}Bestätigt{% endif %}</p>{% if assignment.assignment_status.value != 'cancelled' %}<form method="post" action="/anmeldung/{{ token }}/zuteilungen/{{ assignment.id }}/stornieren"><button class="btn btn-outline-danger" type="submit">Schicht stornieren</button></form>{% endif %}</div></div>{% endfor %}
+{% endblock %}

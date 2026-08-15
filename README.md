@@ -10,9 +10,12 @@ Bearbeitungs-Token; in der Datenbank wird ausschließlich dessen SHA-256-Hash
 gespeichert. Bestätigungs- und Stornierungsnachrichten werden als persistente
 Outbox-Vorschau angelegt und nicht versendet.
 
-Die HTTP-Oberflächen für Registrierung, Bearbeitung und Administration folgen
-in den nächsten Etappen. Bis dahin lässt sich der Ablauf über die automatisierten
-Tests nachvollziehen (`pytest tests/test_registration_service.py`).
+Die HTTP-Oberfläche für die öffentliche Anmeldung ist unter
+`/veranstaltungen/<slug>/anmeldung` vorhanden. Sie benötigt eine als öffentlich
+freigegebene Veranstaltung mit offenen Schichten. Nach dem Absenden führt die
+Bestätigungsseite zum individuellen Bearbeitungslink; einzelne Zuteilungen
+können dort storniert werden. Die vollständige Bearbeitung von Kontaktdaten und
+Schichtauswahl folgt in der nächsten Etappe.
 
 ST. PRIDE Volunteer Management is an open-source, lightweight volunteer management application foundation. This milestone provides only the production-ready project scaffold for a future FastAPI application that can run in Azure Container Apps.
 

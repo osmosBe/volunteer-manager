@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block content %}
+  <h1>{{ event.name }}</h1>
+  <p class="lead">{{ event.short_description or "Ehrenamtliche gesucht" }}</p>
+  {% if event.venue %}<p><strong>Ort:</strong> {{ event.venue }}{% if event.address %}, {{ event.address }}{% endif %}</p>{% endif %}
+  {% if event.description %}<p>{{ event.description }}</p>{% endif %}
+  <h2 class="h3 mt-4">Offene Schichten</h2>
+  {% for shift in shifts %}
+    <article class="card mb-3"><div class="card-body"><h3 class="h5">{{ shift.title }}</h3><p class="mb-1">{{ shift.starts_at.strftime('%d.%m.%Y %H:%M') }}–{{ shift.ends_at.strftime('%H:%M') }} Uhr</p><p class="mb-1">{{ shift.location or event.public_meeting_point or "Treffpunkt folgt" }}</p><p class="mb-0">{{ shift.volunteer_notes or shift.description or "" }}</p></div></article>
+  {% else %}<p>Derzeit gibt es keine offenen Schichten.</p>{% endfor %}
+  <a class="btn btn-primary btn-lg" href="/veranstaltungen/{{ event.slug }}/anmeldung">Jetzt anmelden</a>
+{% endblock %}
