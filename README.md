@@ -57,6 +57,9 @@ Die Personenliste bietet Veranstaltungs-, Zuteilungsstatus- und U18-Filter. Die
 Verwaltung kann Personen manuell anlegen und ihnen Schichten als bestätigt,
 offen oder Warteliste zuweisen. Zeitüberschneidungen benötigen eine ausdrückliche
 zweite Bestätigung; volle Schichten können nicht versehentlich überbucht werden.
+Über die Bulk-Auswahl lassen sich Personenstatus und aktive Zuteilungsstatus für
+mehrere Personen ändern sowie Briefing-Bestätigungen gesammelt dokumentieren;
+Check-ins bleiben bewusst eine individuelle Vor-Ort-Aktion.
 Die Detailansicht erlaubt Statusänderungen und eine explizit bestätigte,
 irreversible Anonymisierung, bei der historische Einsatzstatistiken erhalten
 bleiben. Admin-Änderungen werden im vorhandenen Audit-Log protokolliert. Unter
