@@ -21,6 +21,7 @@ from app.services.registrations import (
     cancel_assignment,
     create_registration,
     get_volunteer_by_edit_token,
+    update_registration,
 )
 
 
@@ -131,3 +132,45 @@ def test_cancelling_assignment_keeps_history_and_frees_capacity(db):
         db, event, registration_data("new@example.org"), [first.id]
     )
     assert replacement.assignments[0].assignment_status == AssignmentStatus.confirmed
+
+
+def test_update_registration_replaces_shifts_and_updates_contact_data(db):
+    event, first, second = make_event_and_shifts(db)
+    result = create_registration(db, event, registration_data(), [first.id])
+
+    assignments = update_registration(
+        db,
+        result.volunteer,
+        RegistrationData(
+            first_name="Sam",
+            last_name="Beispiel",
+            email="sam@example.org",
+            phone="+43 123",
+            contact_consent=True,
+            future_contact_consent=True,
+        ),
+        [second.id],
+    )
+
+    assert [assignment.shift_id for assignment in assignments] == [second.id]
+    assert (
+        db.get(ShiftAssignment, result.assignments[0].id).assignment_status
+        == AssignmentStatus.cancelled
+    )
+    volunteer = db.get(type(result.volunteer), result.volunteer.id)
+    assert volunteer.email == "sam@example.org"
+    assert volunteer.phone == "+43 123"
+    assert volunteer.future_contact_consent is True
+
+
+def test_update_registration_revives_a_cancelled_assignment(db):
+    event, first, _ = make_event_and_shifts(db)
+    result = create_registration(db, event, registration_data(), [first.id])
+    cancel_assignment(db, result.volunteer, result.assignments[0].id)
+
+    assignments = update_registration(
+        db, result.volunteer, registration_data(), [first.id]
+    )
+
+    assert assignments[0].id == result.assignments[0].id
+    assert assignments[0].assignment_status == AssignmentStatus.confirmed

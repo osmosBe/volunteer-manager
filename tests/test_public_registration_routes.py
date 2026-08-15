@@ -58,6 +58,9 @@ def test_public_registration_and_cancellation_flow(tmp_path):
         confirmation = client.get(confirmation_url)
         assert confirmation.status_code == 200
         assert "Infopoint" in confirmation.text
+        edit = client.get(f"/anmeldung/{confirmation_url.split('/')[2]}/bearbeiten")
+        assert edit.status_code == 200
+        assert "Alex" in edit.text
         assignment_id = 1
         token = confirmation_url.split("/")[2]
         cancelled = client.post(

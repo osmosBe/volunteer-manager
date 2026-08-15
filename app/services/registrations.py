@@ -257,6 +257,97 @@ def get_volunteer_by_edit_token(db: Session, token: str) -> Volunteer | None:
     )
 
 
+def update_registration(
+    db: Session, volunteer: Volunteer, data: RegistrationData, shift_ids: list[int]
+) -> tuple[ShiftAssignment, ...]:
+    """Update contact details and replace the public shift selection safely."""
+    if not data.contact_consent:
+        raise RegistrationError(
+            "Bitte stimme der Kontaktaufnahme für diese Veranstaltung zu."
+        )
+    if (
+        not data.first_name.strip()
+        or not data.last_name.strip()
+        or not data.email.strip()
+    ):
+        raise RegistrationError(
+            "Vorname, Nachname und E-Mail-Adresse sind erforderlich."
+        )
+
+    event = db.get(Event, volunteer.event_id)
+    if event is None:
+        raise RegistrationError("Die Veranstaltung wurde nicht gefunden.")
+    _validate_event_is_open(event)
+    shifts = _selected_shifts(db, event, shift_ids)
+    selected_ids = {shift.id for shift in shifts}
+    active_assignments = {
+        assignment.shift_id: assignment
+        for assignment in volunteer.assignments
+        if assignment.assignment_status in ACTIVE_ASSIGNMENT_STATUSES
+        or assignment.assignment_status == AssignmentStatus.waitlisted
+    }
+    assignments_by_shift = {
+        assignment.shift_id: assignment for assignment in volunteer.assignments
+    }
+
+    # Free removed selections before calculating capacity for new selections.
+    for shift_id, assignment in active_assignments.items():
+        if shift_id not in selected_ids:
+            assignment.assignment_status = AssignmentStatus.cancelled
+            assignment.cancelled_at = utcnow()
+
+    assignments: list[ShiftAssignment] = []
+    for shift in shifts:
+        existing = active_assignments.get(shift.id)
+        if existing is not None:
+            assignments.append(existing)
+            continue
+        cancelled_assignment = assignments_by_shift.get(shift.id)
+        if cancelled_assignment is not None:
+            status = _assignment_status(db, shift)
+            cancelled_assignment.assignment_status = status
+            cancelled_assignment.cancelled_at = None
+            cancelled_assignment.confirmed_at = (
+                utcnow() if status == AssignmentStatus.confirmed else None
+            )
+            assignments.append(cancelled_assignment)
+            continue
+        status = _assignment_status(db, shift)
+        assignment = ShiftAssignment(
+            volunteer=volunteer,
+            shift=shift,
+            assignment_status=status,
+            source=AssignmentSource.public,
+            registered_at=utcnow(),
+            confirmed_at=utcnow() if status == AssignmentStatus.confirmed else None,
+        )
+        db.add(assignment)
+        assignments.append(assignment)
+
+    email = normalize_email(data.email)
+    volunteer.first_name = data.first_name.strip()
+    volunteer.last_name = data.last_name.strip()
+    volunteer.email = email
+    volunteer.email_normalized = email
+    volunteer.email_hash = deterministic_email_hash(email)
+    volunteer.phone = data.phone
+    volunteer.pronouns = data.pronouns
+    volunteer.birth_date = data.birth_date
+    volunteer.contact_consent = True
+    volunteer.future_contact_consent = data.future_contact_consent
+    db.add(
+        OutboxMessage(
+            volunteer_id=volunteer.id,
+            kind="registration_updated",
+            subject="Deine Anmeldung wurde aktualisiert",
+            body="Die Aktualisierung wird im Prototyp nur als Vorschau gespeichert.",
+        )
+    )
+    db.commit()
+    db.refresh(volunteer)
+    return tuple(assignments)
+
+
 def cancel_assignment(db: Session, volunteer: Volunteer, assignment_id: int) -> None:
     assignment = db.scalar(
         select(ShiftAssignment).where(

@@ -13,9 +13,12 @@ Outbox-Vorschau angelegt und nicht versendet.
 Die HTTP-Oberfläche für die öffentliche Anmeldung ist unter
 `/veranstaltungen/<slug>/anmeldung` vorhanden. Sie benötigt eine als öffentlich
 freigegebene Veranstaltung mit offenen Schichten. Nach dem Absenden führt die
-Bestätigungsseite zum individuellen Bearbeitungslink; einzelne Zuteilungen
-können dort storniert werden. Die vollständige Bearbeitung von Kontaktdaten und
-Schichtauswahl folgt in der nächsten Etappe.
+Bestätigungsseite zum individuellen Bearbeitungslink. Unter
+`/anmeldung/<token>/bearbeiten` können Ehrenamtliche Kontaktdaten und die
+vollständige Schichtauswahl ändern; entfernte Zuteilungen werden nachvollziehbar
+storniert und erneut gewählte, zuvor stornierte Zuteilungen werden reaktiviert.
+Die Bearbeitung verwendet denselben Kapazitäts-, Wartelisten- und
+Überschneidungscheck wie die Erstanmeldung.
 
 ST. PRIDE Volunteer Management is an open-source, lightweight volunteer management application foundation. This milestone provides only the production-ready project scaffold for a future FastAPI application that can run in Azure Container Apps.
 

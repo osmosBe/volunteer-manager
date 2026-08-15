@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+  <h1>Anmeldung bearbeiten: {{ event.name }}</h1>
+  {% if error %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endif %}
+  <form method="post" class="needs-validation" novalidate>
+    <fieldset class="mb-4"><legend class="h3">Schichten auswählen</legend>
+      {% for shift in shifts %}<div class="form-check card p-3 mb-2"><input class="form-check-input" type="checkbox" name="shift_ids" value="{{ shift.id }}" id="shift-{{ shift.id }}" {% if shift.id in selected_shift_ids %}checked{% endif %}><label class="form-check-label ms-2" for="shift-{{ shift.id }}"><strong>{{ shift.title }}</strong><br>{{ shift.starts_at.strftime('%d.%m.%Y %H:%M') }}–{{ shift.ends_at.strftime('%H:%M') }} Uhr</label></div>{% endfor %}
+    </fieldset>
+    <fieldset class="mb-4"><legend class="h3">Deine Daten</legend><div class="row g-3">
+      <div class="col-md-6"><label class="form-label" for="first_name">Vorname</label><input class="form-control" required id="first_name" name="first_name" value="{{ volunteer.first_name }}"></div>
+      <div class="col-md-6"><label class="form-label" for="last_name">Nachname</label><input class="form-control" required id="last_name" name="last_name" value="{{ volunteer.last_name }}"></div>
+      <div class="col-md-6"><label class="form-label" for="email">E-Mail-Adresse</label><input class="form-control" required type="email" id="email" name="email" value="{{ volunteer.email }}"></div>
+      <div class="col-md-6"><label class="form-label" for="phone">Telefonnummer</label><input class="form-control" id="phone" name="phone" value="{{ volunteer.phone or '' }}"></div>
+      <div class="col-md-6"><label class="form-label" for="pronouns">Pronomen</label><input class="form-control" id="pronouns" name="pronouns" value="{{ volunteer.pronouns or '' }}"></div>
+    </div></fieldset>
+    <div class="form-check mb-2"><input class="form-check-input" required type="checkbox" id="contact_consent" name="contact_consent" value="true" {% if volunteer.contact_consent %}checked{% endif %}><label class="form-check-label" for="contact_consent">Ich stimme der Kontaktaufnahme für diese Veranstaltung zu.</label></div>
+    <div class="form-check mb-4"><input class="form-check-input" type="checkbox" id="future_contact_consent" name="future_contact_consent" value="true" {% if volunteer.future_contact_consent %}checked{% endif %}><label class="form-check-label" for="future_contact_consent">ST. PRIDE darf mich künftig über weitere Ehrenamtsmöglichkeiten informieren.</label></div>
+    <button class="btn btn-primary btn-lg" type="submit">Änderungen speichern</button>
+    <a class="btn btn-outline-secondary btn-lg" href="/anmeldung/{{ token }}/bestaetigung">Abbrechen</a>
+  </form>
+{% endblock %}
