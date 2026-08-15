@@ -164,6 +164,28 @@ def checkin_page(
     )
 
 
+@app.get("/admin/ehrenamtliche", tags=["admin"])
+def volunteer_list(
+    request: Request,
+    query: str = "",
+    db: Session = db_dependency,
+    admin_user=admin_dependency,
+):
+    statement = select(Volunteer).order_by(Volunteer.last_name, Volunteer.first_name)
+    if query.strip():
+        pattern = f"%{query.strip()}%"
+        statement = statement.where(
+            Volunteer.first_name.ilike(pattern)
+            | Volunteer.last_name.ilike(pattern)
+            | Volunteer.email.ilike(pattern)
+            | Volunteer.phone.ilike(pattern)
+        )
+    return templates.TemplateResponse(
+        "admin_volunteer_list.html",
+        {"request": request, "volunteers": list(db.scalars(statement)), "query": query},
+    )
+
+
 @app.post("/admin/check-in/{assignment_id}", tags=["admin"])
 def checkin_submit(
     assignment_id: int,
