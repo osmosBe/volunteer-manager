@@ -4,13 +4,14 @@ from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.database.session import get_db
 from app.models import Event, EventStatus, Shift, ShiftStatus
+from app.services.qr_codes import qr_svg
 from app.services.registrations import (
     RegistrationData,
     RegistrationError,
@@ -129,6 +130,35 @@ def registration_confirmation(token: str, request: Request, db: DatabaseSession)
         request,
         "registration_confirmation.html",
         {"volunteer": volunteer, "token": token},
+    )
+
+
+@router.get("/anmeldung/{token}/zuteilungen/{assignment_id}/qr.svg")
+def public_assignment_qr(
+    token: str, assignment_id: int, request: Request, db: DatabaseSession
+):
+    volunteer = get_volunteer_by_edit_token(db, token)
+    if volunteer is None:
+        raise HTTPException(status_code=404, detail="Bearbeitungslink ungültig.")
+    assignment = next(
+        (
+            item
+            for item in volunteer.assignments
+            if item.id == assignment_id
+            and item.assignment_status.value in {"confirmed", "checked_in"}
+        ),
+        None,
+    )
+    if assignment is None:
+        raise HTTPException(status_code=404, detail="Zuteilung nicht gefunden.")
+    scan_url = str(request.url_for("qr_checkin_scan", assignment_id=assignment.id))
+    return Response(
+        content=qr_svg(scan_url),
+        media_type="image/svg+xml",
+        headers={
+            "Cache-Control": "private, no-store",
+            "Content-Disposition": f'inline; filename="checkin-{assignment.id}.svg"',
+        },
     )
 
 

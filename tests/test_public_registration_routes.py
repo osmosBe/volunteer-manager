@@ -58,6 +58,13 @@ def test_public_registration_and_cancellation_flow(tmp_path):
         confirmation = client.get(confirmation_url)
         assert confirmation.status_code == 200
         assert "Infopoint" in confirmation.text
+        assert "/zuteilungen/1/qr.svg" in confirmation.text
+        qr_response = client.get(
+            f"/anmeldung/{confirmation_url.split('/')[2]}/zuteilungen/1/qr.svg"
+        )
+        assert qr_response.status_code == 200
+        assert qr_response.headers["content-type"].startswith("image/svg+xml")
+        assert b"alex@example.org" not in qr_response.content
         edit = client.get(f"/anmeldung/{confirmation_url.split('/')[2]}/bearbeiten")
         assert edit.status_code == 200
         assert "Alex" in edit.text
@@ -69,5 +76,6 @@ def test_public_registration_and_cancellation_flow(tmp_path):
         )
         assert cancelled.status_code == 303
         assert "Storniert" in client.get(confirmation_url).text
+        assert client.get(f"/anmeldung/{token}/zuteilungen/1/qr.svg").status_code == 404
     finally:
         app.dependency_overrides.clear()

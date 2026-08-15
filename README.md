@@ -39,7 +39,11 @@ für Container-Orchestrierung zur Verfügung.
 
 Der mobil nutzbare Check-in ist unter `/admin/check-in` verfügbar. Dort werden
 bestätigte Zuteilungen eingecheckt, Lanyard/Bändchen/Funkgerät dokumentiert und
-beim Check-out als zurückgegeben markiert.
+beim Check-out als zurückgegeben markiert. Bestätigte Ehrenamtliche sehen pro
+Schicht einen QR-Code in ihrer token-geschützten Bestätigung. Der Code enthält
+nur die Admin-Scan-URL mit der internen Zuteilungs-ID, keine Kontakt- oder
+Gesundheitsdaten. Ein Scan öffnet nach Easy-Auth-Prüfung die mobile
+Check-in-Bestätigung. QR-Karten können pro Veranstaltung gedruckt werden.
 
 CSV-Exporte sind zweckgebunden pro Veranstaltung verfügbar: Kontaktliste unter
 `/admin/export/veranstaltungen/<id>/kontakte.csv` und Schichtbelegung unter
