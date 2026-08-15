@@ -2,6 +2,10 @@
 {% block content %}
   <h1>ST. PRIDE Volunteer Management – Admin Dashboard</h1>
   <p>Signed in as {{ admin_user.name or admin_user.email }}</p>
-  <p><a href="/admin/db">Database status</a></p>
+  <p class="alert alert-warning">Demo-Adminbereich: Die Zugriffskontrolle wird über die vorhandene EasyAuth-Konfiguration bereitgestellt.</p>
+  {% if dashboard_error %}<div class="alert alert-danger" role="alert">{{ dashboard_error }}</div>{% endif %}
+  <div class="d-flex justify-content-between align-items-center mb-3"><h2 class="h3 mb-0">Veranstaltungen</h2><a class="btn btn-primary" href="/admin/veranstaltungen/neu">Veranstaltung anlegen</a></div>
+  {% if events %}<div class="list-group mb-4">{% for event in events %}<div class="list-group-item"><strong>{{ event.name }}</strong><br><span class="text-muted">{{ event.status.value }}{% if event.starts_at %} · {{ event.starts_at.strftime('%d.%m.%Y %H:%M') }}{% endif %}</span></div>{% endfor %}</div>{% else %}<p>Noch keine Veranstaltungen angelegt.</p>{% endif %}
+  <p><a href="/admin/db">Datenbankstatus</a></p>
   <a href="/auth/logout">Sign out</a>
 {% endblock %}

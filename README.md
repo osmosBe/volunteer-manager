@@ -27,6 +27,11 @@ EasyAuth-Integration bleibt erhalten; `AUTH_MODE=disabled` ist ausschließlich
 für die lokale bzw. ausdrücklich freigegebene Prototyp-Entwicklung gedacht.
 Der aktuelle Stand ist nicht als öffentliches Produktivsystem freigegeben.
 
+Der Adminbereich unter `/admin` zeigt Veranstaltungen an und erlaubt derzeit das
+Anlegen neuer Entwürfe über `/admin/veranstaltungen/neu`. Zusätzlich stehen
+`/health/live` (Prozess-Liveness) und `/health/ready` (inklusive Datenbankzugriff)
+für Container-Orchestrierung zur Verfügung.
+
 ## Technology Stack
 
 - Python 3.13

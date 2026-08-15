@@ -1,8 +1,12 @@
-from fastapi import Depends, FastAPI, HTTPException, Request, status
+from datetime import datetime
+from typing import Annotated
+
+from fastapi import Depends, FastAPI, Form, HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, inspect, select, text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.api.public import router as public_router
@@ -44,11 +48,96 @@ def healthz() -> dict[str, str]:
     return {"status": "ok", "version": settings.app_version}
 
 
+@app.get("/health/live", tags=["health"])
+def health_live() -> dict[str, str]:
+    """Liveness deliberately avoids a database dependency."""
+    return {"status": "ok"}
+
+
+@app.get("/health/ready", tags=["health"])
+def health_ready(db: Session = db_dependency):
+    state = database_status(db)
+    if not state["connected"]:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE)
+    return {"status": "ok", "database": "connected"}
+
+
 @app.get("/admin", tags=["admin"])
-def admin_dashboard(request: Request, admin_user=admin_dependency):
+def admin_dashboard(
+    request: Request, db: Session = db_dependency, admin_user=admin_dependency
+):
+    try:
+        events = list(
+            db.scalars(select(Event).order_by(Event.starts_at.desc(), Event.name))
+        )
+        dashboard_error = None
+    except SQLAlchemyError:
+        events = []
+        dashboard_error = "Die Datenbank ist derzeit nicht erreichbar."
     return templates.TemplateResponse(
-        "admin_dashboard.html", {"request": request, "admin_user": admin_user}
+        "admin_dashboard.html",
+        {
+            "request": request,
+            "admin_user": admin_user,
+            "events": events,
+            "dashboard_error": dashboard_error,
+        },
     )
+
+
+@app.get("/admin/veranstaltungen/neu", tags=["admin"])
+def new_event_form(request: Request, admin_user=admin_dependency):
+    return templates.TemplateResponse(
+        "admin_event_form.html", {"request": request, "event": None, "error": None}
+    )
+
+
+@app.post("/admin/veranstaltungen/neu", tags=["admin"])
+def create_event(
+    request: Request,
+    db: Session = db_dependency,
+    admin_user=admin_dependency,
+    name: Annotated[str, Form()] = "",
+    slug: Annotated[str, Form()] = "",
+    starts_at: Annotated[datetime | None, Form()] = None,
+    ends_at: Annotated[datetime | None, Form()] = None,
+):
+    if not name.strip() or not slug.strip():
+        return templates.TemplateResponse(
+            "admin_event_form.html",
+            {
+                "request": request,
+                "event": None,
+                "error": "Titel und URL-Kürzel sind erforderlich.",
+            },
+            status_code=422,
+        )
+    if ends_at and starts_at and ends_at <= starts_at:
+        return templates.TemplateResponse(
+            "admin_event_form.html",
+            {
+                "request": request,
+                "event": None,
+                "error": "Das Ende muss nach dem Beginn liegen.",
+            },
+            status_code=422,
+        )
+    if db.scalar(select(Event).where(Event.slug == slug.strip())):
+        return templates.TemplateResponse(
+            "admin_event_form.html",
+            {
+                "request": request,
+                "event": None,
+                "error": "Dieses URL-Kürzel wird bereits verwendet.",
+            },
+            status_code=422,
+        )
+    event = Event(
+        name=name.strip(), slug=slug.strip(), starts_at=starts_at, ends_at=ends_at
+    )
+    db.add(event)
+    db.commit()
+    return RedirectResponse(url="/admin", status_code=303)
 
 
 @app.get("/admin/db", tags=["admin"])

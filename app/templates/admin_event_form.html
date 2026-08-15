@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Veranstaltung anlegen</h1>
+{% if error %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endif %}
+<form method="post" class="row g-3">
+  <div class="col-12"><label class="form-label" for="name">Titel</label><input class="form-control" required id="name" name="name"></div>
+  <div class="col-12"><label class="form-label" for="slug">URL-Kürzel</label><input class="form-control" required pattern="[a-z0-9-]+" id="slug" name="slug" aria-describedby="slug-help"><div id="slug-help" class="form-text">Nur Kleinbuchstaben, Zahlen und Bindestriche.</div></div>
+  <div class="col-md-6"><label class="form-label" for="starts_at">Beginn</label><input class="form-control" type="datetime-local" id="starts_at" name="starts_at"></div>
+  <div class="col-md-6"><label class="form-label" for="ends_at">Ende</label><input class="form-control" type="datetime-local" id="ends_at" name="ends_at"></div>
+  <div class="col-12"><button class="btn btn-primary" type="submit">Speichern</button> <a class="btn btn-outline-secondary" href="/admin">Abbrechen</a></div>
+</form>
+{% endblock %}
