@@ -7,12 +7,15 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 from sqlalchemy import inspect
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker
 
 from app.config.settings import get_settings
 from app.database.base import Base
+from app.database.diagnostics import inspect_database
 from app.database.session import (
     create_database_engine,
+    database_backend,
     get_db,
     get_engine,
     reset_database_engine,
@@ -93,6 +96,71 @@ def test_database_session_can_connect_to_temp_sqlite(tmp_path):
     with engine.connect() as connection:
         assert connection.exec_driver_sql("SELECT 1").scalar_one() == 1
         assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() == 1
+
+
+def test_database_backend_normalizes_supported_urls():
+    assert database_backend("sqlite:///./dev.db") == "sqlite"
+    assert (
+        database_backend(
+            "postgresql+psycopg://volunteer:secret@db.example.test/volunteer"
+        )
+        == "postgresql"
+    )
+
+
+def test_postgresql_engine_is_lazy_and_uses_psycopg():
+    engine = create_database_engine(
+        "postgresql+psycopg://volunteer:secret@db.example.test/volunteer"
+    )
+    try:
+        assert engine.dialect.name == "postgresql"
+        assert engine.dialect.driver == "psycopg"
+    finally:
+        engine.dispose()
+
+
+def test_database_diagnostics_handles_uninitialized_schema(tmp_path):
+    engine = create_database_engine(f"sqlite:///{tmp_path / 'empty.db'}")
+
+    diagnostics = inspect_database(engine)
+
+    assert diagnostics == {
+        "database_type": "sqlite",
+        "database_reachable": True,
+        "schema_initialized": False,
+        "current_revision": None,
+        "expected_revision": "20260815_0009",
+        "migration_pending": True,
+        "tables": {"events": False, "volunteers": False, "shifts": False},
+        "diagnostic_error": None,
+    }
+
+
+def test_database_diagnostics_never_exposes_connection_exception_secrets():
+    class BrokenEngine:
+        url = make_url(
+            "postgresql+psycopg://volunteer:never-print-me@db.example.test/volunteer"
+        )
+
+        def connect(self):
+            raise RuntimeError("connection failed for password never-print-me")
+
+    diagnostics = inspect_database(BrokenEngine())
+
+    assert diagnostics["database_type"] == "postgresql"
+    assert diagnostics["database_reachable"] is False
+    assert diagnostics["diagnostic_error"] == "database_unreachable"
+    assert "never-print-me" not in str(diagnostics)
+
+
+def test_web_container_start_does_not_run_migrations_or_seed():
+    start_script = (
+        Path(__file__).resolve().parents[1] / "scripts/start.sh"
+    ).read_text()
+
+    assert "alembic upgrade" not in start_script
+    assert "seed_default_event" not in start_script
+    assert "exec uvicorn" in start_script
 
 
 def test_initial_migration_creates_tables(tmp_path):

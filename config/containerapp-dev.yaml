@@ -16,14 +16,7 @@ properties:
         image: <ACR_LOGIN_SERVER>/stpride-volunteer-management:<COMMIT_SHA>
         env:
           - name: DATABASE_URL
-            value: sqlite:////data/app.db
-        volumeMounts:
-          - volumeName: data
-            mountPath: /data
+            secretRef: database-url
     scale:
       minReplicas: 1
-      maxReplicas: 1
-    volumes:
-      - name: data
-        storageType: AzureFile
-        storageName: volunteer-data-new
+      maxReplicas: 2

@@ -4,11 +4,16 @@
   <p>Signed in as {{ admin_user.name or admin_user.email }}</p>
   <table class="table table-sm">
     <tbody>
-      <tr><th scope="row">Connection</th><td>{{ "connected" if status.connected else "not connected" }}</td></tr>
-      <tr><th scope="row">Migration revision</th><td>{{ migration_revision or "unknown" }}</td></tr>
-      <tr><th scope="row">Events</th><td>{{ event_count }}</td></tr>
-      <tr><th scope="row">Volunteers</th><td>{{ volunteer_count }}</td></tr>
-      <tr><th scope="row">Shifts</th><td>{{ shift_count }}</td></tr>
+      <tr><th scope="row">Database type</th><td>{{ diagnostics.database_type }}</td></tr>
+      <tr><th scope="row">Connection</th><td>{{ "connected" if diagnostics.database_reachable else "not connected" }}</td></tr>
+      <tr><th scope="row">Schema initialized</th><td>{{ "yes" if diagnostics.schema_initialized else "no" }}</td></tr>
+      <tr><th scope="row">Current revision</th><td>{{ diagnostics.current_revision or "none" }}</td></tr>
+      <tr><th scope="row">Expected revision</th><td>{{ diagnostics.expected_revision or "unknown" }}</td></tr>
+      <tr><th scope="row">Migration pending</th><td>{% if diagnostics.migration_pending is none %}unknown{% elif diagnostics.migration_pending %}yes{% else %}no{% endif %}</td></tr>
+      <tr><th scope="row">Events table</th><td>{{ "present" if diagnostics.tables.events else "missing" }}</td></tr>
+      <tr><th scope="row">Volunteers table</th><td>{{ "present" if diagnostics.tables.volunteers else "missing" }}</td></tr>
+      <tr><th scope="row">Shifts table</th><td>{{ "present" if diagnostics.tables.shifts else "missing" }}</td></tr>
+      {% if diagnostics.diagnostic_error %}<tr><th scope="row">Diagnostic</th><td>{{ diagnostics.diagnostic_error }}</td></tr>{% endif %}
     </tbody>
   </table>
   <a href="/admin">Back to admin dashboard</a>

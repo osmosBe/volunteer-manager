@@ -181,6 +181,76 @@ def test_debug_easyauth_returns_404_when_debug_false(monkeypatch) -> None:
     assert response.status_code == 404
 
 
+def test_debug_db_returns_404_without_touching_database(monkeypatch) -> None:
+    _set_auth_env(monkeypatch, "disabled", debug=False)
+
+    def fail_if_called():
+        raise AssertionError("database diagnostics must not run when DEBUG=false")
+
+    monkeypatch.setattr("app.main.safe_database_diagnostics", fail_if_called)
+
+    response = TestClient(app).get("/debug/db")
+
+    assert response.status_code == 404
+
+
+def test_debug_db_returns_safe_schema_diagnostics(monkeypatch, tmp_path) -> None:
+    _set_auth_env(monkeypatch, "disabled", debug=True)
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'empty.db'}")
+    get_settings.cache_clear()
+
+    response = TestClient(app).get("/debug/db")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "database_type": "sqlite",
+        "database_reachable": True,
+        "schema_initialized": False,
+        "current_revision": None,
+        "expected_revision": "20260815_0009",
+        "migration_pending": True,
+        "tables": {"events": False, "volunteers": False, "shifts": False},
+        "diagnostic_error": None,
+    }
+    assert "DATABASE_URL" not in response.text
+
+
+def test_admin_db_returns_200_when_database_is_unavailable(monkeypatch) -> None:
+    _set_auth_env(monkeypatch, "disabled")
+    monkeypatch.setattr(
+        "app.main.safe_database_diagnostics",
+        lambda: {
+            "database_type": "postgresql",
+            "database_reachable": False,
+            "schema_initialized": False,
+            "current_revision": None,
+            "expected_revision": "20260815_0009",
+            "migration_pending": None,
+            "tables": {"events": False, "volunteers": False, "shifts": False},
+            "diagnostic_error": "database_unreachable",
+        },
+    )
+
+    response = TestClient(app).get("/admin/db")
+
+    assert response.status_code == 200
+    assert "postgresql" in response.text
+    assert "database_unreachable" in response.text
+
+
+def test_admin_db_checks_permission_before_diagnostics(monkeypatch) -> None:
+    _set_auth_env(monkeypatch, "easyauth")
+
+    def fail_if_called():
+        raise AssertionError("unauthorized requests must not initialize the database")
+
+    monkeypatch.setattr("app.main.safe_database_diagnostics", fail_if_called)
+
+    response = TestClient(app).get("/admin/db")
+
+    assert response.status_code == 401
+
+
 def test_debug_easyauth_returns_sanitized_data_when_debug_true(monkeypatch) -> None:
     _set_auth_env(monkeypatch, "easyauth", debug=True)
     client = TestClient(app)

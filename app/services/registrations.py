@@ -114,7 +114,7 @@ def verify_email_token(db: Session, token: str) -> Volunteer | None:
 
 
 def _as_utc(value: datetime) -> datetime:
-    """Normalize SQLite's timezone-naive timestamps for safe comparisons."""
+    """Normalize timestamps across SQLite and PostgreSQL for safe comparisons."""
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc)

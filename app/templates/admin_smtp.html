@@ -1,1 +1,52 @@
-{% extends "base.html" %}{% block content %}<h1>SMTP-Einstellungen</h1><p class="alert alert-info">Das Passwort wird aus dem Environment-Secret <code>SMTP_PASSWORD</code> gelesen und niemals in SQLite gespeichert oder angezeigt. Speichern prüft nur die Konfiguration und versendet keine Nachricht.</p>{% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}<form class="row g-3" method="post"><div class="col-md-8"><label class="form-label">SMTP-Host<input class="form-control" required name="host" value="{{ configuration.host if configuration else '' }}" placeholder="smtp.example.org"></label></div><div class="col-md-4"><label class="form-label">Port<input class="form-control" required type="number" min="1" max="65535" name="port" value="{{ configuration.port if configuration else 587 }}"></label></div><div class="col-md-6"><label class="form-label">Benutzername<input class="form-control" name="username" value="{{ configuration.username if configuration and configuration.username else '' }}"></label></div><div class="col-md-6"><label class="form-label">Passwortstatus<input class="form-control" readonly value="{{ 'Secret vorhanden' if password_configured else 'SMTP_PASSWORD fehlt' }}"></label></div><div class="col-md-6"><label class="form-label">Absenderadresse<input class="form-control" required type="email" name="from_email" value="{{ configuration.from_email if configuration else '' }}"></label></div><div class="col-md-6"><label class="form-label">Absendername<input class="form-control" name="from_name" value="{{ configuration.from_name if configuration else 'ST. PRIDE Volunteer Management' }}"></label></div><div class="col-12 d-flex flex-wrap gap-4"><label><input type="checkbox" name="use_starttls" value="true" {% if not configuration or configuration.use_starttls %}checked{% endif %}> STARTTLS</label><label><input type="checkbox" name="use_ssl" value="true" {% if configuration and configuration.use_ssl %}checked{% endif %}> SMTP over SSL</label><label><input type="checkbox" name="enabled" value="true" {% if configuration and configuration.enabled %}checked{% endif %}> Versand aktivieren</label></div><div class="col-12"><button class="btn btn-primary">Konfiguration speichern</button> <a class="btn btn-outline-secondary" href="/admin/outbox">Zur Outbox</a> <a class="btn btn-outline-secondary" href="/admin/einstellungen/mail-templates">Mailflow & Vorlagen</a></div></form>{% endblock %}
+{% extends "base.html" %}
+{% block content %}
+  <h1>SMTP-Einstellungen</h1>
+  <p class="alert alert-info">
+    Das Passwort wird aus dem Environment-Secret <code>SMTP_PASSWORD</code>
+    gelesen und niemals in der Datenbank gespeichert oder angezeigt. Speichern
+    prüft nur die Konfiguration und versendet keine Nachricht.
+  </p>
+  {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+  <form class="row g-3" method="post">
+    <div class="col-md-8">
+      <label class="form-label">SMTP-Host
+        <input class="form-control" required name="host" value="{{ configuration.host if configuration else '' }}" placeholder="smtp.example.org">
+      </label>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">Port
+        <input class="form-control" required type="number" min="1" max="65535" name="port" value="{{ configuration.port if configuration else 587 }}">
+      </label>
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Benutzername
+        <input class="form-control" name="username" value="{{ configuration.username if configuration and configuration.username else '' }}">
+      </label>
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Passwortstatus
+        <input class="form-control" readonly value="{{ 'Secret vorhanden' if password_configured else 'SMTP_PASSWORD fehlt' }}">
+      </label>
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Absenderadresse
+        <input class="form-control" required type="email" name="from_email" value="{{ configuration.from_email if configuration else '' }}">
+      </label>
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Absendername
+        <input class="form-control" name="from_name" value="{{ configuration.from_name if configuration else 'ST. PRIDE Volunteer Management' }}">
+      </label>
+    </div>
+    <div class="col-12 d-flex flex-wrap gap-4">
+      <label><input type="checkbox" name="use_starttls" value="true" {% if not configuration or configuration.use_starttls %}checked{% endif %}> STARTTLS</label>
+      <label><input type="checkbox" name="use_ssl" value="true" {% if configuration and configuration.use_ssl %}checked{% endif %}> SMTP over SSL</label>
+      <label><input type="checkbox" name="enabled" value="true" {% if configuration and configuration.enabled %}checked{% endif %}> Versand aktivieren</label>
+    </div>
+    <div class="col-12">
+      <button class="btn btn-primary">Konfiguration speichern</button>
+      <a class="btn btn-outline-secondary" href="/admin/outbox">Zur Outbox</a>
+      <a class="btn btn-outline-secondary" href="/admin/einstellungen/mail-templates">Mailflow & Vorlagen</a>
+    </div>
+  </form>
+{% endblock %}

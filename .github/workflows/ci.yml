@@ -25,3 +25,52 @@ jobs:
           database_path="$RUNNER_TEMP/stpride-migration-check.db"
           DATABASE_URL="sqlite:///$database_path" alembic upgrade head
           DATABASE_URL="sqlite:///$database_path" alembic upgrade head
+
+  postgres-migrations:
+    name: PostgreSQL migration integration
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: volunteer
+          POSTGRES_USER: volunteer
+          POSTGRES_PASSWORD: local-ci-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U volunteer -d volunteer"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://volunteer:local%2Dci%2Dpassword@localhost:5432/volunteer
+      POSTGRES_TEST_URL: postgresql+psycopg://volunteer:local%2Dci%2Dpassword@localhost:5432/volunteer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+      - name: Upgrade fresh PostgreSQL schema twice
+        run: |
+          alembic upgrade head
+          alembic upgrade head
+          alembic current
+      - name: Verify PostgreSQL model semantics
+        run: pytest tests/test_postgres_migrations.py
+
+  infrastructure:
+    name: Infrastructure and bootstrap validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile Bicep source
+        run: |
+          az bicep install --version v0.45.15
+          az bicep build --file infra/main.bicep --outfile "$RUNNER_TEMP/azuredeploy.json"
+          diff --unified infra/azuredeploy.json "$RUNNER_TEMP/azuredeploy.json"
+      - name: Parse bootstrap script without external changes
+        shell: pwsh
+        run: ./scripts/bootstrap.ps1 -ValidateOnly

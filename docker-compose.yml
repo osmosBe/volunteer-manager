@@ -1,6 +1,17 @@
 services:
+  migrate:
+    build: .
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      DATABASE_URL: "sqlite:////data/app.db"
+    volumes:
+      - app-data:/data
+
   app:
     build: .
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     ports:
       - "8000:8000"
     environment:
