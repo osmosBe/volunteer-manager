@@ -21,6 +21,7 @@ from app.models.core import (
     ShiftAssignment,
     ShiftStatus,
     Team,
+    TeamMaterial,
     Volunteer,
     VolunteerCustomField,
     VolunteerStatus,
@@ -52,4 +53,5 @@ __all__ = [
     "VolunteerCustomField",
     "VolunteerStatus",
     "Team",
+    "TeamMaterial",
 ]

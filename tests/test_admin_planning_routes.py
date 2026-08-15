@@ -6,7 +6,7 @@ from sqlalchemy.orm import sessionmaker
 from app.database.base import Base
 from app.database.session import create_database_engine, get_db
 from app.main import app
-from app.models import Event, EventStatus, Shift, Volunteer
+from app.models import Event, EventStatus, Shift, TeamMaterial, Volunteer
 
 
 def test_admin_can_create_plan_edit_and_duplicate_event(tmp_path):
@@ -65,6 +65,36 @@ def test_admin_can_create_plan_edit_and_duplicate_event(tmp_path):
         with Session() as db:
             event = db.get(Event, event_id)
             team_id = event.teams[0].id
+        material_response = client.post(
+            f"/admin/bereiche/{team_id}/materialien",
+            data={
+                "name": "Funkgerät",
+                "quantity_required": 4,
+                "quantity_available": 3,
+                "unit": "Stück",
+                "notes": "Ausgabe beim Infostand",
+            },
+            follow_redirects=False,
+        )
+        assert material_response.status_code == 303
+        with Session() as db:
+            material = db.query(TeamMaterial).one()
+            material_id = material.id
+            assert material.quantity_required == 4
+            assert material.quantity_available == 3
+        assert (
+            client.post(
+                f"/admin/materialien/{material_id}",
+                data={
+                    "quantity_required": 4,
+                    "quantity_available": 4,
+                    "notes": "vollständig",
+                    "is_active": "true",
+                },
+                follow_redirects=False,
+            ).status_code
+            == 303
+        )
         assert (
             client.post(
                 f"/admin/bereiche/{team_id}/aufgaben",
@@ -104,6 +134,7 @@ def test_admin_can_create_plan_edit_and_duplicate_event(tmp_path):
         with Session() as db:
             assert db.query(Event).count() == 2
             assert db.query(Shift).count() == 2
+            assert db.query(TeamMaterial).one().quantity_available == 4
             assert db.query(Volunteer).count() == 1
             assert db.get(Event, event_id).status == EventStatus.registration_open
     finally:
