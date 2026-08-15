@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     app_name: str = "ST. PRIDE Volunteer Management"
     app_version: str = "0.1.0"
     environment: str = "development"
-    database_url: str = Field(default="sqlite:////data/app.db")
+    database_url: str = Field(default="sqlite:///./volunteer.db")
     seed_demo_data: bool = False
 
     app_base_url: str = "http://localhost:8000"

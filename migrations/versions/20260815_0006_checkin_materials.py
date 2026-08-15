@@ -33,7 +33,12 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("quantity_issued", sa.Integer(), nullable=False, server_default="1"),
-        sa.Column("return_required", sa.Boolean(), nullable=False, server_default="1"),
+        sa.Column(
+            "return_required",
+            sa.Boolean(),
+            nullable=False,
+            server_default=sa.true(),
+        ),
         sa.Column("issued_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("returned_at", sa.DateTime(timezone=True)),
         sa.UniqueConstraint("checkin_id", "material_id", name="uq_checkin_material"),

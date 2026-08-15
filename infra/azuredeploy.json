@@ -1,0 +1,1111 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.45.15.27210",
+      "templateHash": "1843765744902124822"
+    }
+  },
+  "parameters": {
+    "namePrefix": {
+      "type": "string",
+      "defaultValue": "volunteer",
+      "minLength": 3,
+      "maxLength": 18,
+      "metadata": {
+        "description": "Short lowercase prefix used to generate resource names."
+      }
+    },
+    "environmentName": {
+      "type": "string",
+      "defaultValue": "dev",
+      "allowedValues": [
+        "dev",
+        "production"
+      ],
+      "metadata": {
+        "description": "Deployment environment label."
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Azure region. Existing resources must be in a compatible region."
+      }
+    },
+    "existingContainerAppEnvironmentName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Existing Container Apps environment to preserve and reuse. Leave empty to create one."
+      }
+    },
+    "existingContainerRegistryName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Existing Azure Container Registry to preserve and reuse. Leave empty to create one."
+      }
+    },
+    "existingContainerAppName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Existing Container App to preserve. Leave empty to create a bootstrap app."
+      }
+    },
+    "existingPostgresServerName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Existing PostgreSQL Flexible Server to reuse. Leave empty to create one."
+      }
+    },
+    "postgresqlAdministratorLogin": {
+      "type": "string",
+      "defaultValue": "volunteeradmin",
+      "metadata": {
+        "description": "PostgreSQL administrator login."
+      }
+    },
+    "postgresqlAdministratorPassword": {
+      "type": "securestring",
+      "metadata": {
+        "description": "Strong PostgreSQL administrator password. This is stored only in Azure resource secrets."
+      }
+    },
+    "bootstrapImage": {
+      "type": "string",
+      "defaultValue": "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest",
+      "metadata": {
+        "description": "Initial public bootstrap image. GitHub Actions replaces it with the application image."
+      }
+    },
+    "deployStorage": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Create a storage account for future files/exports. It is not used for the database."
+      }
+    }
+  },
+  "variables": {
+    "suffix": "[uniqueString(subscription().subscriptionId, resourceGroup().id, parameters('namePrefix'))]",
+    "normalizedPrefix": "[toLower(replace(parameters('namePrefix'), '-', ''))]",
+    "generatedEnvironmentName": "[format('{0}-{1}-env', parameters('namePrefix'), parameters('environmentName'))]",
+    "generatedRegistryName": "[take(format('{0}{1}{2}', variables('normalizedPrefix'), parameters('environmentName'), variables('suffix')), 50)]",
+    "generatedAppName": "[format('{0}-{1}-app', parameters('namePrefix'), parameters('environmentName'))]",
+    "generatedJobName": "[format('{0}-{1}-migrate', parameters('namePrefix'), parameters('environmentName'))]",
+    "generatedPostgresName": "[take(format('{0}-{1}-pg-{2}', parameters('namePrefix'), parameters('environmentName'), variables('suffix')), 63)]",
+    "generatedStorageName": "[take(format('{0}{1}{2}', variables('normalizedPrefix'), parameters('environmentName'), variables('suffix')), 24)]",
+    "workspaceName": "[format('{0}-{1}-logs', parameters('namePrefix'), parameters('environmentName'))]",
+    "tags": {
+      "application": "st-pride-volunteer-manager",
+      "environment": "[parameters('environmentName')]",
+      "managedBy": "bicep"
+    },
+    "selectedRegistryName": "[if(empty(parameters('existingContainerRegistryName')), variables('generatedRegistryName'), parameters('existingContainerRegistryName'))]",
+    "selectedContainerAppName": "[if(empty(parameters('existingContainerAppName')), variables('generatedAppName'), parameters('existingContainerAppName'))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "monitoring",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "workspaceName": {
+            "value": "[variables('workspaceName')]"
+          },
+          "tags": {
+            "value": "[variables('tags')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.45.15.27210",
+              "templateHash": "11156981330022590583"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for monitoring resources."
+              }
+            },
+            "workspaceName": {
+              "type": "string",
+              "metadata": {
+                "description": "Log Analytics workspace name."
+              }
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Resource tags applied to the workspace."
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.OperationalInsights/workspaces",
+              "apiVersion": "2023-09-01",
+              "name": "[parameters('workspaceName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "retentionInDays": 30,
+                "sku": {
+                  "name": "PerGB2018"
+                },
+                "features": {
+                  "searchVersion": 1
+                }
+              }
+            }
+          ],
+          "outputs": {
+            "id": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspaceName'))]"
+            },
+            "name": {
+              "type": "string",
+              "value": "[parameters('workspaceName')]"
+            },
+            "customerId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspaceName')), '2023-09-01').customerId]"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "container-app-environment",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "environmentName": {
+            "value": "[variables('generatedEnvironmentName')]"
+          },
+          "existingEnvironmentName": {
+            "value": "[parameters('existingContainerAppEnvironmentName')]"
+          },
+          "logAnalyticsCustomerId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'monitoring'), '2025-04-01').outputs.customerId.value]"
+          },
+          "logAnalyticsSharedKey": {
+            "value": "[listKeys(resourceId('Microsoft.OperationalInsights/workspaces', variables('workspaceName')), '2023-09-01').primarySharedKey]"
+          },
+          "tags": {
+            "value": "[variables('tags')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.45.15.27210",
+              "templateHash": "12967135406056492474"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for the Container Apps environment."
+              }
+            },
+            "environmentName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name used when a new environment is created."
+              }
+            },
+            "existingEnvironmentName": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Existing environment to reuse. Leave empty to create one."
+              }
+            },
+            "logAnalyticsCustomerId": {
+              "type": "string",
+              "metadata": {
+                "description": "Log Analytics workspace customer ID."
+              }
+            },
+            "logAnalyticsSharedKey": {
+              "type": "securestring",
+              "metadata": {
+                "description": "Log Analytics workspace shared key."
+              }
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Resource tags applied to a new environment."
+              }
+            }
+          },
+          "resources": [
+            {
+              "condition": "[empty(parameters('existingEnvironmentName'))]",
+              "type": "Microsoft.App/managedEnvironments",
+              "apiVersion": "2024-03-01",
+              "name": "[parameters('environmentName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "appLogsConfiguration": {
+                  "destination": "log-analytics",
+                  "logAnalyticsConfiguration": {
+                    "customerId": "[parameters('logAnalyticsCustomerId')]",
+                    "sharedKey": "[parameters('logAnalyticsSharedKey')]"
+                  }
+                }
+              }
+            }
+          ],
+          "outputs": {
+            "id": {
+              "type": "string",
+              "value": "[if(empty(parameters('existingEnvironmentName')), resourceId('Microsoft.App/managedEnvironments', parameters('environmentName')), resourceId('Microsoft.App/managedEnvironments', parameters('existingEnvironmentName')))]"
+            },
+            "name": {
+              "type": "string",
+              "value": "[if(empty(parameters('existingEnvironmentName')), parameters('environmentName'), parameters('existingEnvironmentName'))]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'monitoring')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "container-registry",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "registryName": {
+            "value": "[variables('generatedRegistryName')]"
+          },
+          "existingRegistryName": {
+            "value": "[parameters('existingContainerRegistryName')]"
+          },
+          "tags": {
+            "value": "[variables('tags')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.45.15.27210",
+              "templateHash": "5749726186918318592"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for the registry."
+              }
+            },
+            "registryName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name used when a new registry is created."
+              }
+            },
+            "existingRegistryName": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Existing registry to reuse. Leave empty to create one."
+              }
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Resource tags applied to a new registry."
+              }
+            }
+          },
+          "variables": {
+            "selectedRegistryName": "[if(empty(parameters('existingRegistryName')), parameters('registryName'), parameters('existingRegistryName'))]"
+          },
+          "resources": [
+            {
+              "condition": "[empty(parameters('existingRegistryName'))]",
+              "type": "Microsoft.ContainerRegistry/registries",
+              "apiVersion": "2023-07-01",
+              "name": "[parameters('registryName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "sku": {
+                "name": "Basic"
+              },
+              "properties": {
+                "adminUserEnabled": true,
+                "publicNetworkAccess": "Enabled",
+                "policies": {
+                  "retentionPolicy": {
+                    "days": 7,
+                    "status": "disabled"
+                  }
+                }
+              }
+            }
+          ],
+          "outputs": {
+            "id": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.ContainerRegistry/registries', variables('selectedRegistryName'))]"
+            },
+            "name": {
+              "type": "string",
+              "value": "[variables('selectedRegistryName')]"
+            },
+            "loginServer": {
+              "type": "string",
+              "value": "[format('{0}.azurecr.io', variables('selectedRegistryName'))]"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "postgresql",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "serverName": {
+            "value": "[variables('generatedPostgresName')]"
+          },
+          "existingServerName": {
+            "value": "[parameters('existingPostgresServerName')]"
+          },
+          "administratorLogin": {
+            "value": "[parameters('postgresqlAdministratorLogin')]"
+          },
+          "administratorPassword": {
+            "value": "[parameters('postgresqlAdministratorPassword')]"
+          },
+          "databaseName": {
+            "value": "volunteer"
+          },
+          "tags": {
+            "value": "[variables('tags')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.45.15.27210",
+              "templateHash": "8306253566422810373"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for PostgreSQL."
+              }
+            },
+            "serverName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name used when a new PostgreSQL Flexible Server is created."
+              }
+            },
+            "existingServerName": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Existing PostgreSQL Flexible Server to reuse. Leave empty to create one."
+              }
+            },
+            "administratorLogin": {
+              "type": "string",
+              "metadata": {
+                "description": "PostgreSQL administrator login."
+              }
+            },
+            "administratorPassword": {
+              "type": "securestring",
+              "metadata": {
+                "description": "PostgreSQL administrator password. Never commit this value."
+              }
+            },
+            "databaseName": {
+              "type": "string",
+              "defaultValue": "volunteer",
+              "metadata": {
+                "description": "Application database name."
+              }
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Resource tags applied to a new server."
+              }
+            }
+          },
+          "variables": {
+            "selectedServerName": "[if(empty(parameters('existingServerName')), parameters('serverName'), parameters('existingServerName'))]"
+          },
+          "resources": [
+            {
+              "condition": "[empty(parameters('existingServerName'))]",
+              "type": "Microsoft.DBforPostgreSQL/flexibleServers",
+              "apiVersion": "2024-08-01",
+              "name": "[parameters('serverName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "sku": {
+                "name": "Standard_B1ms",
+                "tier": "Burstable"
+              },
+              "properties": {
+                "version": "16",
+                "administratorLogin": "[parameters('administratorLogin')]",
+                "administratorLoginPassword": "[parameters('administratorPassword')]",
+                "authConfig": {
+                  "activeDirectoryAuth": "Disabled",
+                  "passwordAuth": "Enabled"
+                },
+                "backup": {
+                  "backupRetentionDays": 7,
+                  "geoRedundantBackup": "Disabled"
+                },
+                "highAvailability": {
+                  "mode": "Disabled"
+                },
+                "network": {
+                  "publicNetworkAccess": "Enabled"
+                },
+                "storage": {
+                  "autoGrow": "Enabled",
+                  "storageSizeGB": 32
+                }
+              }
+            },
+            {
+              "type": "Microsoft.DBforPostgreSQL/flexibleServers/databases",
+              "apiVersion": "2024-08-01",
+              "name": "[format('{0}/{1}', variables('selectedServerName'), parameters('databaseName'))]",
+              "properties": {
+                "charset": "UTF8",
+                "collation": "en_US.utf8"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers', parameters('serverName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.DBforPostgreSQL/flexibleServers/firewallRules",
+              "apiVersion": "2024-08-01",
+              "name": "[format('{0}/AllowAzureServices', variables('selectedServerName'))]",
+              "properties": {
+                "startIpAddress": "0.0.0.0",
+                "endIpAddress": "0.0.0.0"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers', parameters('serverName'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "id": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers', variables('selectedServerName'))]"
+            },
+            "name": {
+              "type": "string",
+              "value": "[variables('selectedServerName')]"
+            },
+            "fullyQualifiedDomainName": {
+              "type": "string",
+              "value": "[format('{0}.postgres.database.azure.com', variables('selectedServerName'))]"
+            },
+            "databaseName": {
+              "type": "string",
+              "value": "[parameters('databaseName')]"
+            }
+          }
+        }
+      }
+    },
+    {
+      "condition": "[parameters('deployStorage')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "storage",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "storageAccountName": {
+            "value": "[variables('generatedStorageName')]"
+          },
+          "tags": {
+            "value": "[variables('tags')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.45.15.27210",
+              "templateHash": "11978242473070927576"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for storage."
+              }
+            },
+            "storageAccountName": {
+              "type": "string",
+              "metadata": {
+                "description": "Globally unique storage account name."
+              }
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Resource tags applied to storage."
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Storage/storageAccounts",
+              "apiVersion": "2023-05-01",
+              "name": "[parameters('storageAccountName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "sku": {
+                "name": "Standard_LRS"
+              },
+              "kind": "StorageV2",
+              "properties": {
+                "accessTier": "Hot",
+                "allowBlobPublicAccess": false,
+                "allowSharedKeyAccess": true,
+                "minimumTlsVersion": "TLS1_2",
+                "supportsHttpsTrafficOnly": true
+              }
+            }
+          ],
+          "outputs": {
+            "id": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
+            },
+            "name": {
+              "type": "string",
+              "value": "[parameters('storageAccountName')]"
+            }
+          }
+        }
+      }
+    },
+    {
+      "condition": "[empty(parameters('existingContainerAppName'))]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "container-app",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "containerAppName": {
+            "value": "[variables('generatedAppName')]"
+          },
+          "environmentId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'container-app-environment'), '2025-04-01').outputs.id.value]"
+          },
+          "image": {
+            "value": "[parameters('bootstrapImage')]"
+          },
+          "registryServer": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'container-registry'), '2025-04-01').outputs.loginServer.value]"
+          },
+          "registryUsername": {
+            "value": "[listCredentials(resourceId('Microsoft.ContainerRegistry/registries', variables('selectedRegistryName')), '2023-07-01').username]"
+          },
+          "registryPassword": {
+            "value": "[listCredentials(resourceId('Microsoft.ContainerRegistry/registries', variables('selectedRegistryName')), '2023-07-01').passwords[0].value]"
+          },
+          "databaseUrl": {
+            "value": "[format('postgresql+psycopg://{0}:{1}@{2}:5432/{3}?sslmode=require', parameters('postgresqlAdministratorLogin'), uriComponent(parameters('postgresqlAdministratorPassword')), reference(resourceId('Microsoft.Resources/deployments', 'postgresql'), '2025-04-01').outputs.fullyQualifiedDomainName.value, reference(resourceId('Microsoft.Resources/deployments', 'postgresql'), '2025-04-01').outputs.databaseName.value)]"
+          },
+          "tags": {
+            "value": "[variables('tags')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.45.15.27210",
+              "templateHash": "13742277194338823522"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for Container Apps."
+              }
+            },
+            "containerAppName": {
+              "type": "string",
+              "metadata": {
+                "description": "Container App name."
+              }
+            },
+            "environmentId": {
+              "type": "string",
+              "metadata": {
+                "description": "Container Apps environment resource ID."
+              }
+            },
+            "image": {
+              "type": "string",
+              "metadata": {
+                "description": "Initial container image. The deployment workflow replaces it with a commit-tagged application image."
+              }
+            },
+            "registryServer": {
+              "type": "string",
+              "metadata": {
+                "description": "Registry login server."
+              }
+            },
+            "registryUsername": {
+              "type": "string",
+              "metadata": {
+                "description": "Registry username."
+              }
+            },
+            "registryPassword": {
+              "type": "securestring",
+              "metadata": {
+                "description": "Registry password stored only as a Container App secret."
+              }
+            },
+            "databaseUrl": {
+              "type": "securestring",
+              "metadata": {
+                "description": "SQLAlchemy PostgreSQL URL stored only as a Container App secret."
+              }
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Resource tags applied to the Container App."
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.App/containerApps",
+              "apiVersion": "2024-03-01",
+              "name": "[parameters('containerAppName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "managedEnvironmentId": "[parameters('environmentId')]",
+                "configuration": {
+                  "activeRevisionsMode": "Single",
+                  "ingress": {
+                    "external": true,
+                    "targetPort": 80,
+                    "transport": "auto"
+                  },
+                  "registries": [
+                    {
+                      "server": "[parameters('registryServer')]",
+                      "username": "[parameters('registryUsername')]",
+                      "passwordSecretRef": "registry-password"
+                    }
+                  ],
+                  "secrets": [
+                    {
+                      "name": "database-url",
+                      "value": "[parameters('databaseUrl')]"
+                    },
+                    {
+                      "name": "registry-password",
+                      "value": "[parameters('registryPassword')]"
+                    }
+                  ]
+                },
+                "template": {
+                  "containers": [
+                    {
+                      "name": "volunteer-manager",
+                      "image": "[parameters('image')]",
+                      "env": [
+                        {
+                          "name": "DATABASE_URL",
+                          "secretRef": "database-url"
+                        },
+                        {
+                          "name": "ENVIRONMENT",
+                          "value": "development"
+                        },
+                        {
+                          "name": "AUTH_MODE",
+                          "value": "easyauth"
+                        },
+                        {
+                          "name": "SEED_DEMO_DATA",
+                          "value": "false"
+                        }
+                      ],
+                      "resources": {
+                        "cpu": "[json('0.5')]",
+                        "memory": "1Gi"
+                      }
+                    }
+                  ],
+                  "scale": {
+                    "minReplicas": 1,
+                    "maxReplicas": 2
+                  }
+                }
+              }
+            }
+          ],
+          "outputs": {
+            "id": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.App/containerApps', parameters('containerAppName'))]"
+            },
+            "name": {
+              "type": "string",
+              "value": "[parameters('containerAppName')]"
+            },
+            "fqdn": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.App/containerApps', parameters('containerAppName')), '2024-03-01').configuration.ingress.fqdn]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'container-app-environment')]",
+        "[resourceId('Microsoft.Resources/deployments', 'postgresql')]",
+        "[resourceId('Microsoft.Resources/deployments', 'container-registry')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "migration-job",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "jobName": {
+            "value": "[variables('generatedJobName')]"
+          },
+          "environmentId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'container-app-environment'), '2025-04-01').outputs.id.value]"
+          },
+          "image": {
+            "value": "[parameters('bootstrapImage')]"
+          },
+          "registryServer": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'container-registry'), '2025-04-01').outputs.loginServer.value]"
+          },
+          "registryUsername": {
+            "value": "[listCredentials(resourceId('Microsoft.ContainerRegistry/registries', variables('selectedRegistryName')), '2023-07-01').username]"
+          },
+          "registryPassword": {
+            "value": "[listCredentials(resourceId('Microsoft.ContainerRegistry/registries', variables('selectedRegistryName')), '2023-07-01').passwords[0].value]"
+          },
+          "databaseUrl": {
+            "value": "[format('postgresql+psycopg://{0}:{1}@{2}:5432/{3}?sslmode=require', parameters('postgresqlAdministratorLogin'), uriComponent(parameters('postgresqlAdministratorPassword')), reference(resourceId('Microsoft.Resources/deployments', 'postgresql'), '2025-04-01').outputs.fullyQualifiedDomainName.value, reference(resourceId('Microsoft.Resources/deployments', 'postgresql'), '2025-04-01').outputs.databaseName.value)]"
+          },
+          "tags": {
+            "value": "[variables('tags')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.45.15.27210",
+              "templateHash": "12335436738532963528"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for Container Apps."
+              }
+            },
+            "jobName": {
+              "type": "string",
+              "metadata": {
+                "description": "Migration job name."
+              }
+            },
+            "environmentId": {
+              "type": "string",
+              "metadata": {
+                "description": "Container Apps environment resource ID."
+              }
+            },
+            "image": {
+              "type": "string",
+              "metadata": {
+                "description": "Application image used for Alembic migrations."
+              }
+            },
+            "registryServer": {
+              "type": "string",
+              "metadata": {
+                "description": "Registry login server."
+              }
+            },
+            "registryUsername": {
+              "type": "string",
+              "metadata": {
+                "description": "Registry username."
+              }
+            },
+            "registryPassword": {
+              "type": "securestring",
+              "metadata": {
+                "description": "Registry password stored only as a job secret."
+              }
+            },
+            "databaseUrl": {
+              "type": "securestring",
+              "metadata": {
+                "description": "SQLAlchemy PostgreSQL URL stored only as a job secret."
+              }
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Resource tags applied to the migration job."
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.App/jobs",
+              "apiVersion": "2024-03-01",
+              "name": "[parameters('jobName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "environmentId": "[parameters('environmentId')]",
+                "configuration": {
+                  "triggerType": "Manual",
+                  "replicaTimeout": 900,
+                  "replicaRetryLimit": 0,
+                  "manualTriggerConfig": {
+                    "parallelism": 1,
+                    "replicaCompletionCount": 1
+                  },
+                  "registries": [
+                    {
+                      "server": "[parameters('registryServer')]",
+                      "username": "[parameters('registryUsername')]",
+                      "passwordSecretRef": "registry-password"
+                    }
+                  ],
+                  "secrets": [
+                    {
+                      "name": "database-url",
+                      "value": "[parameters('databaseUrl')]"
+                    },
+                    {
+                      "name": "registry-password",
+                      "value": "[parameters('registryPassword')]"
+                    }
+                  ]
+                },
+                "template": {
+                  "containers": [
+                    {
+                      "name": "alembic",
+                      "image": "[parameters('image')]",
+                      "command": [
+                        "/bin/sh"
+                      ],
+                      "args": [
+                        "-c",
+                        "alembic upgrade head && alembic current"
+                      ],
+                      "env": [
+                        {
+                          "name": "DATABASE_URL",
+                          "secretRef": "database-url"
+                        }
+                      ],
+                      "resources": {
+                        "cpu": "[json('0.25')]",
+                        "memory": "0.5Gi"
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          ],
+          "outputs": {
+            "id": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.App/jobs', parameters('jobName'))]"
+            },
+            "name": {
+              "type": "string",
+              "value": "[parameters('jobName')]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'container-app-environment')]",
+        "[resourceId('Microsoft.Resources/deployments', 'postgresql')]",
+        "[resourceId('Microsoft.Resources/deployments', 'container-registry')]"
+      ]
+    }
+  ],
+  "outputs": {
+    "containerAppEnvironmentName": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'container-app-environment'), '2025-04-01').outputs.name.value]"
+    },
+    "containerRegistryName": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'container-registry'), '2025-04-01').outputs.name.value]"
+    },
+    "containerRegistryLoginServer": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'container-registry'), '2025-04-01').outputs.loginServer.value]"
+    },
+    "containerAppName": {
+      "type": "string",
+      "value": "[variables('selectedContainerAppName')]"
+    },
+    "containerAppUrl": {
+      "type": "string",
+      "value": "[format('https://{0}', if(empty(parameters('existingContainerAppName')), reference(resourceId('Microsoft.Resources/deployments', 'container-app'), '2025-04-01').outputs.fqdn.value, reference(resourceId('Microsoft.App/containerApps', parameters('existingContainerAppName')), '2024-03-01').configuration.ingress.fqdn))]"
+    },
+    "migrationJobName": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'migration-job'), '2025-04-01').outputs.name.value]"
+    },
+    "postgresServerName": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'postgresql'), '2025-04-01').outputs.name.value]"
+    },
+    "postgresHost": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'postgresql'), '2025-04-01').outputs.fullyQualifiedDomainName.value]"
+    },
+    "postgresDatabaseName": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'postgresql'), '2025-04-01').outputs.databaseName.value]"
+    },
+    "storageAccountName": {
+      "type": "string",
+      "value": "[if(parameters('deployStorage'), reference(resourceId('Microsoft.Resources/deployments', 'storage'), '2025-04-01').outputs.name.value, '')]"
+    }
+  }
+}

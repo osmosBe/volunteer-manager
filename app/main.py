@@ -13,7 +13,7 @@ from fastapi.responses import (
 )
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import func, inspect, select, text
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -21,6 +21,7 @@ from app.api.public import router as public_router
 from app.auth.permissions import has_permission, permission_names, require_permission
 from app.auth.provider import get_current_user
 from app.config.settings import get_settings
+from app.database.diagnostics import safe_database_diagnostics
 from app.database.session import database_status, get_db
 from app.models import (
     AgeGroup,
@@ -1851,33 +1852,14 @@ def checkout_submit(
 def admin_database_status(
     request: Request,
     admin_user=admin_dependency,
-    db: Session = db_dependency,
 ):
-    migration_revision = None
-    try:
-        inspector = inspect(db.bind)
-        if inspector.has_table("alembic_version"):
-            migration_revision = db.execute(
-                text("SELECT version_num FROM alembic_version LIMIT 1")
-            ).scalar_one_or_none()
-        status_data = database_status(db)
-        event_count = db.scalar(select(func.count(Event.id))) or 0
-        volunteer_count = db.scalar(select(func.count(Volunteer.id))) or 0
-        shift_count = db.scalar(select(func.count(Shift.id))) or 0
-    except SQLAlchemyError:
-        status_data = {"connected": False, "error": "database_unavailable"}
-        event_count = volunteer_count = shift_count = 0
-
+    diagnostics = safe_database_diagnostics()
     return templates.TemplateResponse(
         "admin_db.html",
         {
             "request": request,
             "admin_user": admin_user,
-            "status": status_data,
-            "migration_revision": migration_revision,
-            "event_count": event_count,
-            "volunteer_count": volunteer_count,
-            "shift_count": shift_count,
+            "diagnostics": diagnostics,
         },
     )
 
@@ -1905,6 +1887,13 @@ def debug_easyauth(request: Request):
             },
         }
     )
+
+
+@app.get("/debug/db", tags=["debug"])
+def debug_database():
+    if not get_settings().debug:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    return JSONResponse(safe_database_diagnostics())
 
 
 @app.get("/auth/login", tags=["auth"])

@@ -2,7 +2,7 @@ from collections.abc import Generator
 from pathlib import Path
 
 from sqlalchemy import create_engine, event, text
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import URL, Engine, make_url
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.config.settings import get_settings
@@ -12,21 +12,22 @@ _session_factory: sessionmaker[Session] | None = None
 _engine_url: str | None = None
 
 
-def _ensure_sqlite_parent_dir(database_url: str) -> None:
-    if not database_url.startswith("sqlite:///") or database_url in {
-        "sqlite://",
-        "sqlite:///:memory:",
-    }:
+def database_backend(database_url: str | URL) -> str:
+    """Return a normalized backend name without connecting to the database."""
+    backend = make_url(database_url).get_backend_name()
+    return "postgresql" if backend.startswith("postgresql") else backend
+
+
+def _ensure_sqlite_parent_dir(database_url: str | URL) -> None:
+    url = make_url(database_url)
+    if url.get_backend_name() != "sqlite" or not url.database:
         return
-    path = database_url.removeprefix("sqlite:///")
-    if path and path != ":memory:":
-        Path(
-            "/" + path if database_url.startswith("sqlite:////") else path
-        ).parent.mkdir(parents=True, exist_ok=True)
+    if url.database != ":memory:":
+        Path(url.database).parent.mkdir(parents=True, exist_ok=True)
 
 
-def _connect_args(database_url: str) -> dict[str, object]:
-    if database_url.startswith("sqlite"):
+def _connect_args(database_url: str | URL) -> dict[str, object]:
+    if database_backend(database_url) == "sqlite":
         return {"check_same_thread": False}
     return {}
 
@@ -34,9 +35,16 @@ def _connect_args(database_url: str) -> dict[str, object]:
 def create_database_engine(database_url: str | None = None) -> Engine:
     url = database_url or get_settings().database_url
     _ensure_sqlite_parent_dir(url)
-    created_engine = create_engine(url, connect_args=_connect_args(url), future=True)
+    backend = database_backend(url)
+    engine_options: dict[str, object] = {
+        "connect_args": _connect_args(url),
+        "future": True,
+    }
+    if backend == "postgresql":
+        engine_options.update(pool_pre_ping=True, pool_recycle=300)
+    created_engine = create_engine(url, **engine_options)
 
-    if url.startswith("sqlite"):
+    if backend == "sqlite":
 
         @event.listens_for(created_engine, "connect")
         def _set_sqlite_pragmas(
@@ -46,7 +54,8 @@ def create_database_engine(database_url: str | None = None) -> Engine:
             cursor.execute("PRAGMA foreign_keys=ON")
             # WAL is useful for the default local persistent database, but avoid it
             # for in-memory or explicitly shared-cache SQLite URLs.
-            if ":memory:" not in url and "mode=memory" not in url:
+            url_text = str(url)
+            if ":memory:" not in url_text and "mode=memory" not in url_text:
                 cursor.execute("PRAGMA journal_mode=WAL")
             cursor.close()
 
