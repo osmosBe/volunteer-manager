@@ -2,6 +2,7 @@ import importlib
 import os
 import subprocess
 import sys
+from datetime import date
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -20,10 +21,18 @@ from app.models import (
     AgeGroup,
     AssignmentSource,
     AssignmentStatus,
+    AuditLog,
+    Briefing,
+    BriefingConfirmation,
     CheckIn,
+    CheckInMaterial,
     Event,
     EventStatus,
+    MailTemplate,
+    OutboxMessage,
+    ShiftAssignment,
     ShiftStatus,
+    SMTPConfiguration,
     Team,
     TeamMaterial,
     Volunteer,
@@ -146,7 +155,34 @@ def test_demo_seed_is_idempotent_and_uses_fictional_contacts(tmp_path):
         assert first.id == second.id
         assert db.query(Team).filter(Team.event_id == first.id).count() == 7
         assert db.query(TeamMaterial).count() == 11
-        assert db.query(Volunteer).filter(Volunteer.event_id == first.id).count() == 25
+        assert db.query(Volunteer).filter(Volunteer.event_id == first.id).count() == 36
+        assert db.query(ShiftAssignment).count() == 36
+        assert {
+            item.assignment_status for item in db.query(ShiftAssignment).all()
+        }.issuperset(
+            {
+                AssignmentStatus.confirmed,
+                AssignmentStatus.waitlisted,
+                AssignmentStatus.pending,
+                AssignmentStatus.checked_in,
+                AssignmentStatus.attended,
+                AssignmentStatus.cancelled,
+                AssignmentStatus.rejected,
+            }
+        )
+        assert db.query(CheckIn).count() == 4
+        assert db.query(CheckInMaterial).count() == 4
+        assert db.query(Briefing).count() == 3
+        assert db.query(BriefingConfirmation).count() >= 14
+        assert db.query(OutboxMessage).count() == 6
+        assert db.query(MailTemplate).count() == 6
+        assert db.query(AuditLog).count() == 4
+        smtp = db.query(SMTPConfiguration).one()
+        assert smtp.host == "smtp.example.invalid"
+        assert smtp.enabled is False
+        assert first.is_public is True
+        assert first.status == EventStatus.registration_open
+        assert first.starts_at.date() > date.today()
         assert all(
             volunteer.email.endswith("@example.invalid")
             for volunteer in db.query(Volunteer).filter(Volunteer.event_id == first.id)

@@ -23,4 +23,10 @@ while :; do
     attempt=$((attempt + 1))
 done
 
+case "${SEED_DEMO_DATA:-false}" in
+    true|TRUE|1|yes|YES)
+        python -m scripts.seed_default_event
+        ;;
+esac
+
 exec uvicorn app.main:app --host 0.0.0.0 --port 8000

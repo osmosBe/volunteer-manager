@@ -1,7 +1,8 @@
 # Five-to-ten-minute demo
 
-Use fictional data only. With non-persistent DEV storage, run migrations and
-`python -m scripts.seed_default_event` in the active revision before the demo.
+Use fictional data only. The non-persistent DEV revision automatically runs the
+idempotent demo seed on startup. For a local demo, run migrations and then
+`python -m scripts.seed_default_event` once.
 
 1. Open `/` and select **St. Pölten PRIDE 2026**.
 2. Click a shift card or its **Für diese Schicht anmelden** button and verify
