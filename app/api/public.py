@@ -1,6 +1,6 @@
 """Public, unauthenticated volunteer-registration routes."""
 
-from datetime import date
+from datetime import date, time
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -15,6 +15,7 @@ from app.services.qr_codes import qr_svg
 from app.services.registrations import (
     RegistrationData,
     RegistrationError,
+    available_places,
     cancel_assignment,
     create_registration,
     get_volunteer_by_edit_token,
@@ -42,11 +43,38 @@ def get_public_event(db: Session, slug: str) -> Event:
     event = db.scalar(
         select(Event)
         .where(Event.slug == slug, Event.is_public.is_(True))
-        .options(selectinload(Event.shifts).selectinload(Shift.role))
+        .options(
+            selectinload(Event.shifts).selectinload(Shift.role),
+            selectinload(Event.teams),
+        )
     )
     if event is None:
         raise HTTPException(status_code=404, detail="Veranstaltung nicht gefunden.")
     return event
+
+
+def filtered_open_shifts(
+    db: Session,
+    event: Event,
+    *,
+    team_id: int | None = None,
+    day: date | None = None,
+    time_from: time | None = None,
+    time_to: time | None = None,
+    available_only: bool = False,
+) -> tuple[list[Shift], dict[int, int]]:
+    open_shifts = [shift for shift in event.shifts if shift.status == ShiftStatus.open]
+    places = {shift.id: available_places(db, shift) for shift in open_shifts}
+    shifts = [
+        shift
+        for shift in open_shifts
+        if (team_id is None or (shift.role and shift.role.team_id == team_id))
+        and (day is None or shift.starts_at.date() == day)
+        and (time_from is None or shift.starts_at.time() >= time_from)
+        and (time_to is None or shift.ends_at.time() <= time_to)
+        and (not available_only or places[shift.id] > 0)
+    ]
+    return sorted(shifts, key=lambda shift: shift.starts_at), places
 
 
 @router.get("/")
@@ -57,22 +85,81 @@ def landing_page(request: Request, db: DatabaseSession):
 
 
 @router.get("/veranstaltungen/{slug}")
-def event_detail(slug: str, request: Request, db: DatabaseSession):
+def event_detail(
+    slug: str,
+    request: Request,
+    db: DatabaseSession,
+    team_id: int | None = None,
+    day: date | None = None,
+    time_from: time | None = None,
+    time_to: time | None = None,
+    available_only: bool = False,
+):
     event = get_public_event(db, slug)
-    shifts = [shift for shift in event.shifts if shift.status == ShiftStatus.open]
+    shifts, places = filtered_open_shifts(
+        db,
+        event,
+        team_id=team_id,
+        day=day,
+        time_from=time_from,
+        time_to=time_to,
+        available_only=available_only,
+    )
     return templates.TemplateResponse(
-        request, "event_detail.html", {"event": event, "shifts": shifts}
+        request,
+        "event_detail.html",
+        {
+            "event": event,
+            "shifts": shifts,
+            "places": places,
+            "filters": {
+                "team_id": team_id,
+                "day": day,
+                "time_from": time_from,
+                "time_to": time_to,
+                "available_only": available_only,
+            },
+        },
     )
 
 
 @router.get("/veranstaltungen/{slug}/anmeldung")
-def registration_form(slug: str, request: Request, db: DatabaseSession):
+def registration_form(
+    slug: str,
+    request: Request,
+    db: DatabaseSession,
+    team_id: int | None = None,
+    day: date | None = None,
+    time_from: time | None = None,
+    time_to: time | None = None,
+    available_only: bool = False,
+):
     event = get_public_event(db, slug)
-    shifts = [shift for shift in event.shifts if shift.status == ShiftStatus.open]
+    shifts, places = filtered_open_shifts(
+        db,
+        event,
+        team_id=team_id,
+        day=day,
+        time_from=time_from,
+        time_to=time_to,
+        available_only=available_only,
+    )
     return templates.TemplateResponse(
         request,
         "registration_form.html",
-        {"event": event, "shifts": shifts, "error": None},
+        {
+            "event": event,
+            "shifts": shifts,
+            "places": places,
+            "filters": {
+                "team_id": team_id,
+                "day": day,
+                "time_from": time_from,
+                "time_to": time_to,
+                "available_only": available_only,
+            },
+            "error": None,
+        },
     )
 
 
@@ -109,11 +196,17 @@ def submit_registration(
             shift_ids or [],
         )
     except RegistrationError as exc:
-        shifts = [shift for shift in event.shifts if shift.status == ShiftStatus.open]
+        shifts, places = filtered_open_shifts(db, event)
         return templates.TemplateResponse(
             request,
             "registration_form.html",
-            {"event": event, "shifts": shifts, "error": str(exc)},
+            {
+                "event": event,
+                "shifts": shifts,
+                "places": places,
+                "filters": {},
+                "error": str(exc),
+            },
             status_code=422,
         )
     return RedirectResponse(

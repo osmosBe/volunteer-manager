@@ -217,6 +217,19 @@ def create_event(
     starts_at: Annotated[datetime | None, Form()] = None,
     ends_at: Annotated[datetime | None, Form()] = None,
     venue: Annotated[str, Form()] = "",
+    address: Annotated[str, Form()] = "",
+    short_description: Annotated[str, Form()] = "",
+    description: Annotated[str, Form()] = "",
+    public_meeting_point: Annotated[str, Form()] = "",
+    registration_opens_at: Annotated[datetime | None, Form()] = None,
+    registration_closes_at: Annotated[datetime | None, Form()] = None,
+    contact_name: Annotated[str, Form()] = "",
+    contact_email: Annotated[str, Form()] = "",
+    contact_phone: Annotated[str, Form()] = "",
+    briefing: Annotated[str, Form()] = "",
+    clothing_and_material: Annotated[str, Form()] = "",
+    catering_info: Annotated[str, Form()] = "",
+    accessibility_info: Annotated[str, Form()] = "",
     status_value: Annotated[str, Form(alias="status")] = EventStatus.draft.value,
     is_public: Annotated[bool, Form()] = False,
 ):
@@ -240,6 +253,20 @@ def create_event(
             },
             status_code=422,
         )
+    if (
+        registration_opens_at
+        and registration_closes_at
+        and registration_closes_at <= registration_opens_at
+    ):
+        return templates.TemplateResponse(
+            "admin_event_form.html",
+            {
+                "request": request,
+                "event": None,
+                "error": "Das Ende der Anmeldung muss nach deren Beginn liegen.",
+            },
+            status_code=422,
+        )
     if db.scalar(select(Event).where(Event.slug == slug.strip())):
         return templates.TemplateResponse(
             "admin_event_form.html",
@@ -256,12 +283,35 @@ def create_event(
         raise HTTPException(
             status_code=422, detail="Ungültiger Veranstaltungsstatus"
         ) from exc
+    normalized_contact_email = None
+    if contact_email.strip():
+        try:
+            normalized_contact_email = validate_email_address(contact_email)
+        except EmailAddressError as exc:
+            return templates.TemplateResponse(
+                "admin_event_form.html",
+                {"request": request, "event": None, "error": str(exc)},
+                status_code=422,
+            )
     event = Event(
         name=name.strip(),
         slug=slug.strip(),
         starts_at=starts_at,
         ends_at=ends_at,
         venue=venue.strip() or None,
+        address=address.strip() or None,
+        short_description=short_description.strip() or None,
+        description=description.strip() or None,
+        public_meeting_point=public_meeting_point.strip() or None,
+        registration_opens_at=registration_opens_at,
+        registration_closes_at=registration_closes_at,
+        contact_name=contact_name.strip() or None,
+        contact_email=normalized_contact_email,
+        contact_phone=contact_phone.strip() or None,
+        briefing=briefing.strip() or None,
+        clothing_and_material=clothing_and_material.strip() or None,
+        catering_info=catering_info.strip() or None,
+        accessibility_info=accessibility_info.strip() or None,
         status=event_status,
         is_public=is_public,
     )
@@ -324,6 +374,19 @@ def edit_event_submit(
     starts_at: Annotated[datetime | None, Form()] = None,
     ends_at: Annotated[datetime | None, Form()] = None,
     venue: Annotated[str, Form()] = "",
+    address: Annotated[str, Form()] = "",
+    short_description: Annotated[str, Form()] = "",
+    description: Annotated[str, Form()] = "",
+    public_meeting_point: Annotated[str, Form()] = "",
+    registration_opens_at: Annotated[datetime | None, Form()] = None,
+    registration_closes_at: Annotated[datetime | None, Form()] = None,
+    contact_name: Annotated[str, Form()] = "",
+    contact_email: Annotated[str, Form()] = "",
+    contact_phone: Annotated[str, Form()] = "",
+    briefing: Annotated[str, Form()] = "",
+    clothing_and_material: Annotated[str, Form()] = "",
+    catering_info: Annotated[str, Form()] = "",
+    accessibility_info: Annotated[str, Form()] = "",
     status_value: Annotated[str, Form(alias="status")] = EventStatus.draft.value,
     is_public: Annotated[bool, Form()] = False,
 ):
@@ -335,6 +398,12 @@ def edit_event_submit(
         error = "Titel und URL-Kürzel sind erforderlich."
     elif starts_at and ends_at and ends_at <= starts_at:
         error = "Das Ende muss nach dem Beginn liegen."
+    elif (
+        registration_opens_at
+        and registration_closes_at
+        and registration_closes_at <= registration_opens_at
+    ):
+        error = "Das Ende der Anmeldung muss nach deren Beginn liegen."
     elif db.scalar(
         select(Event).where(Event.slug == slug.strip(), Event.id != event.id)
     ):
@@ -344,6 +413,12 @@ def edit_event_submit(
     except ValueError:
         event_status = EventStatus.draft
         error = "Ungültiger Veranstaltungsstatus."
+    normalized_contact_email = None
+    if contact_email.strip():
+        try:
+            normalized_contact_email = validate_email_address(contact_email)
+        except EmailAddressError as exc:
+            error = str(exc)
     if error:
         return templates.TemplateResponse(
             "admin_event_form.html",
@@ -355,6 +430,19 @@ def edit_event_submit(
     event.starts_at = starts_at
     event.ends_at = ends_at
     event.venue = venue.strip() or None
+    event.address = address.strip() or None
+    event.short_description = short_description.strip() or None
+    event.description = description.strip() or None
+    event.public_meeting_point = public_meeting_point.strip() or None
+    event.registration_opens_at = registration_opens_at
+    event.registration_closes_at = registration_closes_at
+    event.contact_name = contact_name.strip() or None
+    event.contact_email = normalized_contact_email
+    event.contact_phone = contact_phone.strip() or None
+    event.briefing = briefing.strip() or None
+    event.clothing_and_material = clothing_and_material.strip() or None
+    event.catering_info = catering_info.strip() or None
+    event.accessibility_info = accessibility_info.strip() or None
     event.status = event_status
     event.is_public = is_public
     record_audit(
@@ -389,6 +477,14 @@ def duplicate_event(
         ends_at=source.ends_at,
         venue=source.venue,
         address=source.address,
+        public_meeting_point=source.public_meeting_point,
+        contact_name=source.contact_name,
+        contact_email=source.contact_email,
+        contact_phone=source.contact_phone,
+        briefing=source.briefing,
+        clothing_and_material=source.clothing_and_material,
+        catering_info=source.catering_info,
+        accessibility_info=source.accessibility_info,
         status=EventStatus.draft,
         is_public=False,
     )
