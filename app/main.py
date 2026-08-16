@@ -17,6 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.api.admin_mail import router as admin_mail_router
 from app.api.public import router as public_router
 from app.auth.permissions import has_permission, permission_names, require_permission
 from app.auth.provider import get_current_user
@@ -81,6 +82,7 @@ templates = Jinja2Templates(directory="app/templates")
 app = FastAPI(title=settings.app_name, version=settings.app_version)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 app.include_router(public_router)
+app.include_router(admin_mail_router)
 
 
 @app.exception_handler(status.HTTP_401_UNAUTHORIZED)

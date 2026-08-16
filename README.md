@@ -227,7 +227,163 @@ do not add a parallel password login.
 `AUTH_MODE=disabled` is for isolated local development only. Shared DEV and
 production environments should use `AUTH_MODE=easyauth`.
 
-### 5. First deployment
+### 5. Configure transactional mail (optional)
+
+New installations use `MAIL_PROVIDER=console`, which never contacts an external
+mail service. It logs only provider/operation, recipient addresses/count and
+subject; bodies, attachment contents and credentials are excluded. Set a valid
+`MAIL_FROM_ADDRESS` before using the admin test page. Microsoft 365 is optional
+and the application starts normally without Graph configuration.
+
+The reusable boundary is:
+
+```text
+business workflow -> MailService -> MailProvider
+                                  -> ConsoleMailProvider
+                                  -> MicrosoftGraphMailProvider
+                                     -> GraphTokenProvider
+```
+
+The legacy SMTP/outbox workflow is not migrated in this milestone. New business
+workflows should depend on `MailService`; a later database outbox can be inserted
+in front of it without changing provider code. No SMTP AUTH, Redis, Celery or
+background queue is introduced here.
+
+#### Microsoft 365 shared-mailbox setup
+
+1. Create or select the shared mailbox. Record its primary SMTP address and
+   Exchange alias; neither is hardcoded in the application.
+2. Create a dedicated single-tenant Entra application and its service principal.
+   Record the tenant ID, application/client ID and the **Enterprise application
+   service-principal Object ID** (not the App Registration Object ID).
+3. The only sending capability is `Mail.Send` (application). Do not grant
+   `Mail.Read`, `Mail.ReadWrite`, `MailboxSettings.Read`, `User.Read.All` or a
+   delegated permission. Graph delivery uses
+   `POST /users/{MAIL_FROM_ADDRESS}/sendMail`, never `/me/sendMail`, with
+   `https://graph.microsoft.com/.default`. In the traditional Entra flow this is
+   **API permissions → Microsoft Graph → Application permissions → Mail.Send →
+   Grant admin consent**. That grant is tenant-wide unless constrained by a
+   legacy Application Access Policy; do not leave it in place alongside the
+   preferred Exchange Application RBAC assignment described next.
+4. Restrict the app to the intended mailbox **before installing its credential**.
+   The preferred modern design is Exchange Online Application RBAC. The current
+   Microsoft model has an important subtlety: an Entra-admin-consented
+   organization-wide `Mail.Send` permission and an Exchange-scoped RBAC role are
+   additive. Leaving both assigned defeats the RBAC mailbox restriction. For the
+   preferred design, grant the scoped Exchange role below and remove any
+   unscoped Entra `Mail.Send` app-role assignment before production use. This is
+   the modern replacement for Application Access Policies.
+5. Create a client secret only for the initial credential model. Copy it once,
+   store it directly as the Container App secret `m365-client-secret`, then
+   discard the plaintext. Never place it in GitHub variables, Bicep parameter
+   files, commands retained in shell history or logs.
+6. Configure the Container App values listed below, open `/admin/mail`, and send
+   one test to an explicitly entered address.
+7. Verify the message in the shared mailbox Sent Items. Graph `202 Accepted`
+   means Exchange accepted the request, not that final delivery is guaranteed.
+8. Verify the scoped authorization returns `InScope=True` for the sender mailbox
+   and `InScope=False` for a known unauthorized mailbox. After RBAC cache
+   propagation, a direct Graph send targeting that unauthorized mailbox must
+   return 403. Never temporarily change the application's configured sender to a
+   real person's mailbox for this test.
+
+Microsoft documents the endpoint and `202`/Sent Items behavior in
+[user: sendMail](https://learn.microsoft.com/en-us/graph/api/user-sendmail?view=graph-rest-1.0)
+and the authorization model in
+[RBAC for Applications in Exchange Online](https://learn.microsoft.com/en-us/exchange/permissions-exo/application-rbac).
+
+**Security warning:** `Mail.Send` application access is powerful. An unscoped
+Entra grant permits app-only sending as mailboxes across the tenant. The
+application cannot enforce tenant-side mailbox isolation; Exchange Online must.
+
+One resource-scope pattern for a dedicated mailbox is an Exchange custom
+attribute. Choose an organization-specific marker and confirm it matches only
+the intended mailbox:
+
+```powershell
+Connect-ExchangeOnline
+
+Set-Mailbox -Identity "<SHARED-MAILBOX>" `
+  -CustomAttribute15 "VolunteerManagerMailSender"
+
+New-ManagementScope -Name "Volunteer Manager sender" `
+  -RecipientRestrictionFilter "CustomAttribute15 -eq 'VolunteerManagerMailSender'"
+
+New-ServicePrincipal `
+  -AppId "<M365-CLIENT-ID>" `
+  -ObjectId "<ENTERPRISE-APP-SERVICE-PRINCIPAL-OBJECT-ID>" `
+  -DisplayName "Volunteer Manager mail"
+
+New-ManagementRoleAssignment `
+  -Name "Volunteer Manager scoped Mail.Send" `
+  -App "<ENTERPRISE-APP-SERVICE-PRINCIPAL-OBJECT-ID>" `
+  -Role "Application Mail.Send" `
+  -CustomResourceScope "Volunteer Manager sender"
+
+Test-ServicePrincipalAuthorization `
+  -Identity "<M365-CLIENT-ID>" `
+  -Resource "<SHARED-MAILBOX>" | Format-Table
+
+Test-ServicePrincipalAuthorization `
+  -Identity "<M365-CLIENT-ID>" `
+  -Resource "<UNAUTHORIZED-MAILBOX>" | Format-Table
+```
+
+Review the scope's recipient preview and ensure no other mailbox carries the
+same marker. `Test-ServicePrincipalAuthorization` tests Exchange RBAC only; it
+does not include separate Entra grants. Remove any tenant-wide Entra
+`Mail.Send` consent, wait for permission cache propagation (Microsoft documents
+30 minutes to two hours), and perform the negative Graph test as the final proof.
+
+#### Runtime configuration
+
+Container App non-secret settings:
+
+```text
+MAIL_PROVIDER=graph
+MAIL_FROM_ADDRESS=<SHARED-MAILBOX-ADDRESS>
+MAIL_FROM_NAME=<DISPLAY-NAME>
+MAIL_REPLY_TO=<OPTIONAL-ADDRESS>
+M365_TENANT_ID=<TENANT-ID>
+M365_CLIENT_ID=<MAIL-APP-CLIENT-ID>
+M365_AUTH_MODE=client_secret
+```
+
+Secret/reference:
+
+```text
+Container App secret: m365-client-secret=<CLIENT-SECRET>
+Environment:          M365_CLIENT_SECRET=secretref:m365-client-secret
+```
+
+`infra/main.bicep` exposes all values and treats `m365ClientSecret` as secure.
+For an existing Container App, `scripts/bootstrap.ps1` preserves an existing
+secret reference, prompts for a missing secret with hidden input, and redacts
+native CLI output on secret-write failures. It does not create the shared
+mailbox, Graph permission or Exchange RBAC assignment.
+
+The client secret needs an owner and expiry alert. Rotate it by creating a second
+credential, updating `m365-client-secret`, sending an admin test, and only then
+deleting the old credential. Keep the overlap short. `M365_AUTH_MODE=managed_identity`
+is reserved behind `GraphTokenProvider` but intentionally fails closed today;
+Managed Identity is the preferred future credential model.
+
+#### Test mail and safe diagnostics
+
+- `GET /admin/mail` and `POST /admin/mail/test` require the existing `admin`
+  permission. The POST accepts one explicit recipient and always uses the
+  configured sender. It records `mail.test`, actor, provider, recipient count and
+  success/failure in `AuditLog`, but not the body or address.
+- `GET /debug/mail` is available only with `DEBUG=true`; otherwise it returns
+  404. It reports boolean credential/configuration state but never secrets,
+  tokens, raw provider responses or an environment dump.
+- HTML mail is rendered with autoescaping Jinja templates in
+  `app/templates/email/`. Never concatenate volunteer-controlled values into
+  HTML.
+- Graph retries only 429 and selected 5xx/network failures, honors bounded
+  numeric `Retry-After`, and does not blindly retry permanent 4xx errors.
+
+### 6. First deployment
 
 1. Confirm the `development` GitHub Environment and its variables (below).
 2. Confirm the Container App and migration job both reference the same

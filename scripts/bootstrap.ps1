@@ -13,6 +13,15 @@ param(
     [string]$MigrationJobName,
     [string]$ApplicationClientId,
     [SecureString]$DatabaseUrl,
+    [string]$MailProvider,
+    [string]$MailFromAddress,
+    [string]$MailFromName,
+    [string]$MailReplyTo,
+    [string]$M365TenantId,
+    [string]$M365ClientId,
+    [ValidateSet('client_secret', 'managed_identity')]
+    [string]$M365AuthMode = 'client_secret',
+    [SecureString]$M365ClientSecret,
     [switch]$ValidateOnly
 )
 
@@ -50,6 +59,20 @@ function Invoke-Native {
     return $output
 }
 
+function Invoke-NativeSensitive {
+    param(
+        [Parameter(Mandatory)] [string]$Command,
+        [Parameter(Mandatory)] [string]$FailureMessage,
+        [Parameter(ValueFromRemainingArguments)] [string[]]$Arguments
+    )
+    # Never surface native output for commands whose arguments contain a
+    # secret: some CLI errors echo the full invocation.
+    $null = & $Command @Arguments 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw $FailureMessage
+    }
+}
+
 function Get-AzJson {
     param([Parameter(ValueFromRemainingArguments)] [string[]]$Arguments)
     $raw = Invoke-Native az @Arguments --output json
@@ -83,6 +106,33 @@ function Test-DatabaseSecretReference {
         $null -ne $secretRefProperty -and
         -not [string]::IsNullOrWhiteSpace([string]$secretRefProperty.Value)
     )
+}
+
+function Get-ContainerEnvironmentValue {
+    param([object]$ContainerApp, [string]$Name)
+    $item = @(
+        $ContainerApp.properties.template.containers[0].env |
+            Where-Object {
+                $_.name -eq $Name -and
+                $null -ne $_.PSObject.Properties['value']
+            }
+    ) | Select-Object -First 1
+    if ($null -ne $item) {
+        return [string]$item.value
+    }
+    return ''
+}
+
+function Test-ContainerSecretReference {
+    param([object]$ContainerApp, [string]$Name)
+    return @(
+        $ContainerApp.properties.template.containers[0].env |
+            Where-Object {
+                $_.name -eq $Name -and
+                $null -ne $_.PSObject.Properties['secretRef'] -and
+                -not [string]::IsNullOrWhiteSpace([string]$_.secretRef)
+            }
+    ).Count -gt 0
 }
 
 if ($ValidateOnly) {
@@ -208,12 +258,12 @@ if ($appDatabaseReference.Count -eq 0 -or $jobDatabaseReference.Count -eq 0) {
             throw "DATABASE_URL must use postgresql+psycopg://."
         }
         if ($appDatabaseReference.Count -eq 0) {
-            Invoke-Native az containerapp secret set --name $ContainerAppName --resource-group $DevResourceGroup --secrets "database-url=$plainDatabaseUrl" | Out-Null
+            Invoke-NativeSensitive az "Could not update the Container App database secret. Azure CLI output was redacted." containerapp secret set --name $ContainerAppName --resource-group $DevResourceGroup --secrets "database-url=$plainDatabaseUrl"
             Invoke-Native az containerapp update --name $ContainerAppName --resource-group $DevResourceGroup --set-env-vars "DATABASE_URL=secretref:database-url" | Out-Null
             Write-Host "Configured the existing Container App database secret without replacing other settings."
         }
         if ($jobDatabaseReference.Count -eq 0) {
-            Invoke-Native az containerapp job secret set --name $MigrationJobName --resource-group $DevResourceGroup --secrets "database-url=$plainDatabaseUrl" | Out-Null
+            Invoke-NativeSensitive az "Could not update the migration job database secret. Azure CLI output was redacted." containerapp job secret set --name $MigrationJobName --resource-group $DevResourceGroup --secrets "database-url=$plainDatabaseUrl"
             Invoke-Native az containerapp job update --name $MigrationJobName --resource-group $DevResourceGroup --set-env-vars "DATABASE_URL=secretref:database-url" | Out-Null
             Write-Host "Configured the migration job database secret."
         }
@@ -226,6 +276,68 @@ if ($appDatabaseReference.Count -eq 0 -or $jobDatabaseReference.Count -eq 0) {
 } else {
     Write-Host "Existing DATABASE_URL secret references were preserved."
 }
+
+if ([string]::IsNullOrWhiteSpace($MailProvider)) {
+    $MailProvider = Get-ContainerEnvironmentValue $containerApp 'MAIL_PROVIDER'
+    if ([string]::IsNullOrWhiteSpace($MailProvider)) {
+        $MailProvider = 'console'
+    }
+}
+$MailProvider = $MailProvider.Trim().ToLowerInvariant()
+if ($MailProvider -notin @('console', 'graph')) {
+    throw "MAIL_PROVIDER must be 'console' or 'graph'."
+}
+if ([string]::IsNullOrWhiteSpace($MailFromAddress)) {
+    $MailFromAddress = Get-ContainerEnvironmentValue $containerApp 'MAIL_FROM_ADDRESS'
+}
+if ([string]::IsNullOrWhiteSpace($MailFromName)) {
+    $MailFromName = Get-ContainerEnvironmentValue $containerApp 'MAIL_FROM_NAME'
+    if ([string]::IsNullOrWhiteSpace($MailFromName)) {
+        $MailFromName = 'ST. PRIDE Volunteer Manager'
+    }
+}
+if ([string]::IsNullOrWhiteSpace($MailReplyTo)) {
+    $MailReplyTo = Get-ContainerEnvironmentValue $containerApp 'MAIL_REPLY_TO'
+}
+if ([string]::IsNullOrWhiteSpace($M365TenantId)) {
+    $M365TenantId = Get-ContainerEnvironmentValue $containerApp 'M365_TENANT_ID'
+}
+if ([string]::IsNullOrWhiteSpace($M365ClientId)) {
+    $M365ClientId = Get-ContainerEnvironmentValue $containerApp 'M365_CLIENT_ID'
+}
+
+if ($MailProvider -eq 'graph') {
+    $MailFromAddress = Resolve-RequiredValue $MailFromAddress 'Microsoft 365 shared mailbox address'
+    $M365TenantId = Resolve-RequiredValue $M365TenantId 'Microsoft 365 tenant ID'
+    $M365ClientId = Resolve-RequiredValue $M365ClientId 'Microsoft 365 mail application client ID'
+    if ($M365AuthMode -eq 'managed_identity') {
+        Write-Warning 'Managed Identity mail authentication is reserved for a future release; Graph test delivery will fail safely.'
+    } elseif (-not (Test-ContainerSecretReference $containerApp 'M365_CLIENT_SECRET')) {
+        if ($null -eq $M365ClientSecret) {
+            $M365ClientSecret = Read-Host 'Microsoft 365 application client secret (input hidden)' -AsSecureString
+        }
+        $clientSecretPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($M365ClientSecret)
+        try {
+            $plainClientSecret = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($clientSecretPointer)
+            if ([string]::IsNullOrWhiteSpace($plainClientSecret)) {
+                throw 'M365 client secret must not be empty.'
+            }
+            Invoke-NativeSensitive az "Could not update the Microsoft 365 client secret. Azure CLI output was redacted." containerapp secret set --name $ContainerAppName --resource-group $DevResourceGroup --secrets "m365-client-secret=$plainClientSecret"
+            Invoke-Native az containerapp update --name $ContainerAppName --resource-group $DevResourceGroup --set-env-vars 'M365_CLIENT_SECRET=secretref:m365-client-secret' | Out-Null
+            Write-Host 'Configured the Microsoft 365 credential as a Container App secret reference.'
+        } finally {
+            if ($clientSecretPointer -ne [IntPtr]::Zero) {
+                [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($clientSecretPointer)
+            }
+            $plainClientSecret = $null
+        }
+    } else {
+        Write-Host 'Existing M365_CLIENT_SECRET secret reference was preserved.'
+    }
+}
+
+Invoke-Native az containerapp update --name $ContainerAppName --resource-group $DevResourceGroup --set-env-vars "MAIL_PROVIDER=$MailProvider" "MAIL_FROM_ADDRESS=$MailFromAddress" "MAIL_FROM_NAME=$MailFromName" "MAIL_REPLY_TO=$MailReplyTo" "M365_TENANT_ID=$M365TenantId" "M365_CLIENT_ID=$M365ClientId" "M365_AUTH_MODE=$M365AuthMode" | Out-Null
+Write-Host "Transactional mail configuration applied (provider: $MailProvider; no message was sent)."
 
 if ([string]::IsNullOrWhiteSpace($ApplicationClientId) -and $existingVariables.ContainsKey("AZURE_CLIENT_ID")) {
     $ApplicationClientId = $existingVariables["AZURE_CLIENT_ID"]
