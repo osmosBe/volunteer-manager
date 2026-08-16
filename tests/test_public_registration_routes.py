@@ -268,5 +268,80 @@ def test_public_event_content_and_shift_filters(tmp_path):
         assert registration.status_code == 200
         assert "Info Früh" in registration.text
         assert "Parade Spät" in registration.text
+
+        for path in [
+            "/veranstaltungen/filterbar",
+            "/veranstaltungen/filterbar/anmeldung",
+        ]:
+            empty_filters = client.get(
+                path,
+                params={
+                    "team_id": "",
+                    "day": "",
+                    "time_from": "",
+                    "time_to": "",
+                    "available_only": "",
+                },
+            )
+            assert empty_filters.status_code == 200
+            assert "Info Früh" in empty_filters.text
+            assert "Parade Spät" in empty_filters.text
+
+        combined = client.get(
+            "/veranstaltungen/filterbar",
+            params={
+                "day": day,
+                "time_from": "13:00",
+                "time_to": "17:00",
+                "available_only": "true",
+            },
+        )
+        assert combined.status_code == 200
+        assert "Info Früh" not in combined.text
+        assert "Parade Spät" in combined.text
+        assert f'name="day" value="{day}"' in combined.text
+        assert 'name="time_from" value="13:00"' in combined.text
+        assert 'name="time_to" value="17:00"' in combined.text
+        assert 'name="available_only" value="true" checked' in combined.text
+        assert 'href="/veranstaltungen/filterbar">zurücksetzen</a>' in combined.text
+
+        registration_combined = client.get(
+            "/veranstaltungen/filterbar/anmeldung",
+            params={
+                "day": day,
+                "time_from": "13:00",
+                "time_to": "17:00",
+                "available_only": "true",
+            },
+        )
+        assert registration_combined.status_code == 200
+        assert "Info Früh" not in registration_combined.text
+        assert "Parade Spät" in registration_combined.text
+        assert f'name="day" value="{day}"' in registration_combined.text
+        assert 'href="/veranstaltungen/filterbar/anmeldung">zurücksetzen</a>' in (
+            registration_combined.text
+        )
+
+        for params, message in [
+            ({"team_id": "invalid"}, "Der Arbeitsbereich ist ungültig."),
+            ({"day": "2026-99-99"}, "Der Tag ist ungültig."),
+            ({"time_from": "29:00"}, "Die Startzeit ist ungültig."),
+            (
+                {"available_only": "perhaps"},
+                "Der Verfügbarkeitsfilter ist ungültig.",
+            ),
+        ]:
+            invalid_filter = client.get("/veranstaltungen/filterbar", params=params)
+            assert invalid_filter.status_code == 422
+            assert message in invalid_filter.text
+            assert "Bitte überprüfe deine Eingaben." in invalid_filter.text
+
+        invalid_shift = client.get(
+            "/veranstaltungen/filterbar/anmeldung",
+            params={"shift_id": "invalid"},
+        )
+        assert invalid_shift.status_code == 422
+        assert "Die ausgewählte Schicht ist ungültig." in invalid_shift.text
+        assert "Bitte überprüfe deine Eingaben." in invalid_shift.text
     finally:
         app.dependency_overrides.clear()

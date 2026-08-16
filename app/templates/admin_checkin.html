@@ -1,1 +1,86 @@
-{% extends "base.html" %}{% block content %}<div class="d-flex justify-content-between align-items-center"><h1>Check-in</h1><a href="/admin">Dashboard</a></div><p class="alert alert-info">QR-Code mit der Smartphone-Kamera scannen oder Person hier suchen. Der QR-Code enthält keine Kontaktdaten und öffnet diese geschützte Admin-Oberfläche.</p><form class="row g-2 mb-4" method="get"><div class="col-md-6"><input class="form-control form-control-lg" name="query" value="{{ query }}" placeholder="Name, E-Mail oder Telefonnummer" aria-label="Person suchen"></div><div class="col-md-4"><select class="form-select form-select-lg" name="event_id"><option value="">Alle Veranstaltungen</option>{% for event in events %}<option value="{{ event.id }}" {% if event_id == event.id %}selected{% endif %}>{{ event.name }}</option>{% endfor %}</select></div><div class="col-md-2"><button class="btn btn-primary btn-lg w-100">Suchen</button></div></form>{% for assignment in assignments %}<article class="card mb-3"><div class="card-body"><div class="d-flex justify-content-between gap-3"><div><h2 class="h5">{{ assignment.volunteer.first_name }} {{ assignment.volunteer.last_name }}</h2><p>{{ assignment.shift.title }} · {{ assignment.shift.starts_at.strftime('%d.%m. %H:%M') }} · {{ assignment.assignment_status.value }}</p></div><a class="btn btn-outline-secondary align-self-start" href="/admin/check-in/scan/{{ assignment.id }}">QR-Ansicht</a></div>{% if assignment.assignment_status.value == 'confirmed' %}<form method="post" action="/admin/check-in/{{ assignment.id }}">{% include "_checkin_material_fields.html" %}<button class="btn btn-success btn-lg d-block mt-3">Check-in</button></form>{% else %}{% if assignment.checkin.material_issues %}<ul>{% for issue in assignment.checkin.material_issues %}<li>{{ issue.material.name }} · {{ issue.quantity_issued }} {{ issue.material.unit }}{% if issue.return_required %} · {{ 'zurückgegeben' if issue.returned_at else 'Rückgabe offen' }}{% else %} · Verbrauch{% endif %}</li>{% endfor %}</ul>{% endif %}<form method="post" action="/admin/check-in/{{ assignment.id }}/check-out"><button class="btn btn-outline-primary btn-lg">Check-out und Materialrückgabe</button></form>{% endif %}</div></article>{% else %}<p>Keine passenden bestätigten oder eingecheckten Zuteilungen.</p>{% endfor %}{% endblock %}
+{% extends "base.html" %}
+{% from "components/form_errors.html" import form_error_summary %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center">
+  <h1>Check-in</h1>
+  <a href="/admin">Dashboard</a>
+</div>
+<p class="alert alert-info">
+  QR-Code mit der Smartphone-Kamera scannen oder Person hier suchen. Der
+  QR-Code enthält keine Kontaktdaten und öffnet diese geschützte
+  Admin-Oberfläche.
+</p>
+
+{{ form_error_summary(filter_error, {}, "checkin-filter-errors") }}
+<form class="row g-2 mb-4" method="get">
+  <div class="col-md-6">
+    <label class="visually-hidden" for="checkin-query">Person suchen</label>
+    <input
+      class="form-control form-control-lg"
+      id="checkin-query"
+      name="query"
+      value="{{ query }}"
+      placeholder="Name, E-Mail oder Telefonnummer"
+    >
+  </div>
+  <div class="col-md-4">
+    <label class="visually-hidden" for="checkin-event">Veranstaltung</label>
+    <select
+      class="form-select form-select-lg"
+      id="checkin-event"
+      name="event_id"
+    >
+      <option value="">Alle Veranstaltungen</option>
+      {% for event in events %}
+        <option value="{{ event.id }}" {% if event_id == event.id %}selected{% endif %}>{{ event.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-md-2">
+    <button class="btn btn-primary btn-lg w-100">Suchen</button>
+  </div>
+  <div class="col-12">
+    <a href="/admin/check-in">Filter zurücksetzen</a>
+  </div>
+</form>
+
+{% for assignment in assignments %}
+  <article class="card mb-3">
+    <div class="card-body">
+      <div class="d-flex justify-content-between gap-3">
+        <div>
+          <h2 class="h5">{{ assignment.volunteer.first_name }} {{ assignment.volunteer.last_name }}</h2>
+          <p>{{ assignment.shift.title }} · {{ assignment.shift.starts_at.strftime('%d.%m. %H:%M') }} · {{ assignment.assignment_status.value }}</p>
+        </div>
+        <a class="btn btn-outline-secondary align-self-start" href="/admin/check-in/scan/{{ assignment.id }}">QR-Ansicht</a>
+      </div>
+      {% if assignment.assignment_status.value == 'confirmed' %}
+        <form method="post" action="/admin/check-in/{{ assignment.id }}">
+          {% include "_checkin_material_fields.html" %}
+          <button class="btn btn-success btn-lg d-block mt-3">Check-in</button>
+        </form>
+      {% else %}
+        {% if assignment.checkin.material_issues %}
+          <ul>
+            {% for issue in assignment.checkin.material_issues %}
+              <li>
+                {{ issue.material.name }} · {{ issue.quantity_issued }} {{ issue.material.unit }}
+                {% if issue.return_required %}
+                  · {{ 'zurückgegeben' if issue.returned_at else 'Rückgabe offen' }}
+                {% else %}
+                  · Verbrauch
+                {% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+        <form method="post" action="/admin/check-in/{{ assignment.id }}/check-out">
+          <button class="btn btn-outline-primary btn-lg">Check-out und Materialrückgabe</button>
+        </form>
+      {% endif %}
+    </div>
+  </article>
+{% else %}
+  <p>Keine passenden bestätigten oder eingecheckten Zuteilungen.</p>
+{% endfor %}
+{% endblock %}
