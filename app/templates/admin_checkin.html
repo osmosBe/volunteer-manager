@@ -60,23 +60,7 @@
           <button class="btn btn-success btn-lg d-block mt-3">Check-in</button>
         </form>
       {% else %}
-        {% if assignment.checkin.material_issues %}
-          <ul>
-            {% for issue in assignment.checkin.material_issues %}
-              <li>
-                {{ issue.material.name }} · {{ issue.quantity_issued }} {{ issue.material.unit }}
-                {% if issue.return_required %}
-                  · {{ 'zurückgegeben' if issue.returned_at else 'Rückgabe offen' }}
-                {% else %}
-                  · Verbrauch
-                {% endif %}
-              </li>
-            {% endfor %}
-          </ul>
-        {% endif %}
-        <form method="post" action="/admin/check-in/{{ assignment.id }}/check-out">
-          <button class="btn btn-outline-primary btn-lg">Check-out und Materialrückgabe</button>
-        </form>
+        {% include "_checkout_form.html" %}
       {% endif %}
     </div>
   </article>

@@ -65,6 +65,7 @@ def test_admin_can_create_plan_edit_and_duplicate_event(tmp_path):
                 "briefing": "Sicherheitsbriefing",
                 "accessibility_info": "Stufenlos erreichbar",
                 "allows_minors": "true",
+                "goodiebag_offered": "true",
             },
             follow_redirects=False,
         )
@@ -173,6 +174,7 @@ def test_admin_can_create_plan_edit_and_duplicate_event(tmp_path):
                 "ends_at": (start + timedelta(hours=2)).isoformat(),
                 "needed_count": 3,
                 "waitlist_capacity": 1,
+                "goodiebag_override": "false",
             },
             follow_redirects=False,
         )
@@ -191,6 +193,7 @@ def test_admin_can_create_plan_edit_and_duplicate_event(tmp_path):
                     "waitlist_capacity": 2,
                     "status": "open",
                     "location": "Hauptinfo",
+                    "goodiebag_override": "true",
                 },
                 follow_redirects=False,
             ).status_code
@@ -220,10 +223,15 @@ def test_admin_can_create_plan_edit_and_duplicate_event(tmp_path):
             )
             assert db.get(Event, event_id).contact_email == "kontakt@example.org"
             assert db.get(Event, event_id).allows_minors is True
+            assert db.get(Event, event_id).goodiebag_offered is True
             assert db.get(Event, event_id).start_time_is_set is True
             assert db.get(Event, event_id).end_time_is_set is True
             assert db.get(Shift, shift_id).title == "Info Früh aktualisiert"
             assert db.get(Shift, shift_id).needed_count == 4
+            assert db.get(Shift, shift_id).goodiebag_override is True
+            duplicated_event = db.query(Event).filter(Event.id != event_id).one()
+            assert duplicated_event.goodiebag_offered is True
+            assert duplicated_event.shifts[0].goodiebag_override is True
     finally:
         app.dependency_overrides.clear()
 

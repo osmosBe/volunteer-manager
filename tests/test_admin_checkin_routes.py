@@ -29,7 +29,12 @@ def test_admin_checkin_and_material_return_smoke_flow(tmp_path):
     Session = sessionmaker(bind=engine)
     start = datetime.now(timezone.utc) + timedelta(hours=1)
     with Session() as db:
-        event = Event(name="Check-in Test", slug="checkin", status=EventStatus.ongoing)
+        event = Event(
+            name="Check-in Test",
+            slug="checkin",
+            status=EventStatus.ongoing,
+            goodiebag_offered=True,
+        )
         team = Team(event=event, name="Infobereich")
         role = Role(team=team, name="Infopoint")
         radio_material = TeamMaterial(
@@ -75,6 +80,7 @@ def test_admin_checkin_and_material_return_smoke_flow(tmp_path):
             [event, team, role, radio_material, flyers, shift, volunteer, assignment]
         )
         db.commit()
+        event_id = event.id
         assignment_id = assignment.id
         radio_material_id = radio_material.id
         flyers_id = flyers.id
@@ -108,8 +114,17 @@ def test_admin_checkin_and_material_return_smoke_flow(tmp_path):
             follow_redirects=False,
         )
         assert response.status_code == 303
+        checkout_page = client.get("/admin/check-in")
+        assert checkout_page.status_code == 200
+        assert "beim Check-out zurücknehmen" in checkout_page.text
+        assert 'name="goodiebag_received"' in checkout_page.text
+        checkout_scan_page = client.get(f"/admin/check-in/scan/{assignment_id}")
+        assert "beim Check-out zurücknehmen" in checkout_scan_page.text
+        assert "Goodiebag erhalten" in checkout_scan_page.text
         response = client.post(
-            f"/admin/check-in/{assignment_id}/check-out", follow_redirects=False
+            f"/admin/check-in/{assignment_id}/check-out",
+            data={"goodiebag_received": "true"},
+            follow_redirects=False,
         )
         assert response.status_code == 303
         with Session() as db:
@@ -118,6 +133,7 @@ def test_admin_checkin_and_material_return_smoke_flow(tmp_path):
             assert checked.checkin.checked_in_at is not None
             assert checked.checkin.lanyard_issued is True
             assert checked.checkin.radio_issued is True
+            assert checked.checkin.goodiebag_received is True
             assert checked.checkin.materials_returned_at is not None
             issues = db.query(CheckInMaterial).order_by(CheckInMaterial.id).all()
             assert len(issues) == 2
@@ -130,5 +146,9 @@ def test_admin_checkin_and_material_return_smoke_flow(tmp_path):
             assert radio_issue.returned_at is not None
             assert flyer_issue.return_required is False
             assert flyer_issue.returned_at is None
+        export = client.get(f"/admin/export/veranstaltungen/{event_id}/schichten.csv")
+        assert export.status_code == 200
+        assert "Goodiebag erhalten" in export.text
+        assert ",Ja" in export.text
     finally:
         app.dependency_overrides.clear()
