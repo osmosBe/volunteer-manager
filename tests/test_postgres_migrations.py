@@ -35,6 +35,8 @@ def test_postgresql_schema_preserves_nullable_business_fields():
     assert event_columns["ends_at"]["nullable"] is True
     assert event_columns["start_time_is_set"]["nullable"] is False
     assert event_columns["end_time_is_set"]["nullable"] is False
+    assert event_columns["registration_open_time_is_set"]["nullable"] is False
+    assert event_columns["registration_close_time_is_set"]["nullable"] is False
     assert volunteer_columns["birth_date"]["nullable"] is True
 
 

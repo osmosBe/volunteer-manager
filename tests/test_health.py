@@ -186,7 +186,7 @@ def test_debug_db_returns_safe_schema_diagnostics(monkeypatch, tmp_path) -> None
         "database_reachable": True,
         "schema_initialized": False,
         "current_revision": None,
-        "expected_revision": "20260816_0012",
+        "expected_revision": "20260816_0013",
         "migration_pending": True,
         "tables": {"events": False, "volunteers": False, "shifts": False},
         "diagnostic_error": None,

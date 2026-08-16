@@ -54,13 +54,25 @@
     <label class="form-label" for="public_meeting_point">Allgemeiner Treffpunkt</label>
     <input class="form-control" id="public_meeting_point" name="public_meeting_point" value="{{ form_values.public_meeting_point }}">
   </div>
-  <div class="col-md-6">
-    <label class="form-label" for="registration_opens_at">Anmeldung öffnet</label>
-    <input class="form-control" type="datetime-local" id="registration_opens_at" name="registration_opens_at" value="{{ form_values.registration_opens_at }}">
+  <div class="col-md-4">
+    <label class="form-label" for="registration_open_date">Anmeldung öffnet am</label>
+    <input class="form-control{% if field_errors.get('registration_open_date') %} is-invalid{% endif %}" required type="date" id="registration_open_date" name="registration_open_date" value="{{ form_values.registration_open_date }}"{% if field_errors.get('registration_open_date') %} aria-invalid="true" aria-describedby="registration_open_date-error"{% endif %}>
+    {{ field_error("registration_open_date", field_errors) }}
   </div>
-  <div class="col-md-6">
-    <label class="form-label" for="registration_closes_at">Anmeldung schließt</label>
-    <input class="form-control" type="datetime-local" id="registration_closes_at" name="registration_closes_at" value="{{ form_values.registration_closes_at }}" data-after="registration_opens_at" data-after-message="Das Ende der Anmeldung muss nach deren Beginn liegen.">
+  <div class="col-md-2">
+    <label class="form-label" for="registration_open_time">Uhrzeit</label>
+    <input class="form-control{% if field_errors.get('registration_open_time') %} is-invalid{% endif %}" type="time" id="registration_open_time" name="registration_open_time" value="{{ form_values.registration_open_time }}"{% if field_errors.get('registration_open_time') %} aria-invalid="true" aria-describedby="registration_open_time-error"{% endif %}>
+    {{ field_error("registration_open_time", field_errors) }}
+  </div>
+  <div class="col-md-4">
+    <label class="form-label" for="registration_close_date">Anmeldung schließt am</label>
+    <input class="form-control{% if field_errors.get('registration_close_date') %} is-invalid{% endif %}" required type="date" id="registration_close_date" name="registration_close_date" value="{{ form_values.registration_close_date }}" data-range-start-date="registration_open_date" data-range-start-time="registration_open_time" data-range-end-time="registration_close_time" data-range-message="Das Ende der Anmeldung muss nach deren Beginn liegen."{% if field_errors.get('registration_close_date') %} aria-invalid="true" aria-describedby="registration_close_date-error"{% endif %}>
+    {{ field_error("registration_close_date", field_errors) }}
+  </div>
+  <div class="col-md-2">
+    <label class="form-label" for="registration_close_time">Uhrzeit</label>
+    <input class="form-control{% if field_errors.get('registration_close_time') %} is-invalid{% endif %}" type="time" id="registration_close_time" name="registration_close_time" value="{{ form_values.registration_close_time }}"{% if field_errors.get('registration_close_time') %} aria-invalid="true" aria-describedby="registration_close_time-error"{% endif %}>
+    {{ field_error("registration_close_time", field_errors) }}
   </div>
   <div class="col-md-4">
     <label class="form-label" for="contact_name">Kontaktname</label>

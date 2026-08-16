@@ -163,6 +163,12 @@ class Event(TimestampMixin, Base):
     registration_closes_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True)
     )
+    registration_open_time_is_set: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=False
+    )
+    registration_close_time_is_set: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=False
+    )
     status: Mapped[EventStatus] = mapped_column(
         SAEnum(EventStatus, native_enum=False),
         default=EventStatus.draft,

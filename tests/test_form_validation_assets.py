@@ -69,6 +69,8 @@ def test_event_form_keeps_values_and_shows_server_errors_in_form(tmp_path):
                 "slug": "bestehend",
                 "start_date": "2030-05-10",
                 "end_date": "2030-05-11",
+                "registration_open_date": "2030-05-01",
+                "registration_close_date": "2030-05-09",
                 "contact_name": "Kontakt bleibt erhalten",
             },
         )
@@ -92,4 +94,7 @@ def test_event_form_keeps_values_and_shows_server_errors_in_form(tmp_path):
     assert 'name="start_date"' in page.text and "required" in page.text
     assert 'name="start_time"' in page.text
     assert 'data-range-start-date="start_date"' in page.text
-    assert 'data-after="registration_opens_at"' in page.text
+    assert 'name="registration_open_date"' in page.text
+    assert 'name="registration_open_date"' in page.text and "required" in page.text
+    assert 'name="registration_open_time"' in page.text
+    assert 'data-range-start-date="registration_open_date"' in page.text
