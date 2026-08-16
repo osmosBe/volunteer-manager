@@ -1,14 +1,15 @@
 """Deprecated admin helpers kept for backward compatibility.
 
-Use app.auth.permissions.require_permission("admin") and permissions.yaml for new
-route authorization. ADMIN_ALLOWED_EMAILS and ADMIN_ALLOWED_GROUP_IDS are only a
-DEV/emergency fallback for the admin permission.
+New route authorization uses ``app.auth.permissions.require_permission`` and
+database-backed mappings. The legacy YAML/allowlist configuration is not an
+authorization source.
 """
 
-from fastapi import Request
+from fastapi import HTTPException, Request, status
 
 from app.auth.models import AuthenticatedUser
-from app.auth.permissions import has_permission, require_permission
+from app.auth.permissions import has_permission
+from app.auth.provider import get_current_user
 from app.config.settings import Settings
 
 
@@ -19,4 +20,9 @@ def is_authorized_admin(
 
 
 def require_admin(request: Request) -> AuthenticatedUser:
-    return require_permission("admin")(request)
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    if not has_permission(user, "admin"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+    return user

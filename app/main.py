@@ -1,4 +1,6 @@
 import csv
+import logging
+from contextlib import asynccontextmanager
 from datetime import datetime
 from io import StringIO
 from typing import Annotated
@@ -16,10 +18,18 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
+from starlette.middleware.sessions import SessionMiddleware
 
 from app.api.admin_mail import router as admin_mail_router
+from app.api.admin_permissions import router as admin_permissions_router
 from app.api.public import router as public_router
-from app.auth.permissions import has_permission, permission_names, require_permission
+from app.auth.oidc import begin_login, clear_login, complete_login, oidc_diagnostics
+from app.auth.permissions import (
+    has_permission,
+    permission_names,
+    require_any_permission,
+    require_permission,
+)
 from app.auth.provider import get_current_user
 from app.config.settings import get_settings
 from app.database.diagnostics import safe_database_diagnostics
@@ -70,19 +80,52 @@ from app.services.mail_templates import (
     ensure_mail_templates,
     unknown_placeholders,
 )
+from app.services.permissions import user_has_permission
 from app.services.qr_codes import qr_svg
 from app.services.volunteers import deterministic_email_hash
 
-admin_dependency = Depends(require_permission("admin"))
+admin_dependency = Depends(require_any_permission(["admin", "manager"]))
+checkin_dependency = Depends(require_any_permission(["admin", "manager", "checkin"]))
+strict_admin_dependency = Depends(require_permission("admin"))
 db_dependency = Depends(get_db)
 
 settings = get_settings()
 templates = Jinja2Templates(directory="app/templates")
+logger = logging.getLogger(__name__)
 
-app = FastAPI(title=settings.app_name, version=settings.app_version)
+
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    del application
+    if get_settings().auth_mode == "disabled":
+        logger.warning(
+            "AUTH_MODE=disabled is enabled; never expose this mode "
+            "to an untrusted network."
+        )
+    yield
+
+
+app = FastAPI(
+    title=settings.app_name,
+    version=settings.app_version,
+    lifespan=lifespan,
+)
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=(
+        settings.session_secret.get_secret_value()
+        if settings.session_secret
+        else "local-development-session-secret"
+    ),
+    session_cookie="volunteer_manager_session",
+    same_site="lax",
+    https_only=settings.app_base_url.lower().startswith("https://"),
+    max_age=8 * 60 * 60,
+)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 app.include_router(public_router)
 app.include_router(admin_mail_router)
+app.include_router(admin_permissions_router)
 
 
 @app.exception_handler(status.HTTP_401_UNAUTHORIZED)
@@ -199,6 +242,7 @@ def admin_dashboard(
         events = []
         event_stats = {}
         dashboard_error = "Die Datenbank ist derzeit nicht erreichbar."
+    can_manage_permissions = user_has_permission(db, admin_user, "admin")
     return templates.TemplateResponse(
         "admin_dashboard.html",
         {
@@ -207,6 +251,17 @@ def admin_dashboard(
             "events": events,
             "event_stats": event_stats,
             "dashboard_error": dashboard_error,
+            "auth_provider": {
+                "disabled": "Local Development",
+                "easyauth": "EasyAuth",
+                "oidc": "Generic OIDC",
+            }[get_settings().auth_mode],
+            "database_provider": (
+                safe_database_diagnostics()["database_type"]
+                if can_manage_permissions
+                else None
+            ),
+            "can_manage_permissions": can_manage_permissions,
         },
     )
 
@@ -976,7 +1031,7 @@ def checkin_page(
     query: str = "",
     event_id: int | None = None,
     db: Session = db_dependency,
-    admin_user=admin_dependency,
+    admin_user=checkin_dependency,
 ):
     statement = (
         select(ShiftAssignment)
@@ -1018,7 +1073,7 @@ def qr_checkin_scan(
     assignment_id: int,
     request: Request,
     db: Session = db_dependency,
-    admin_user=admin_dependency,
+    admin_user=checkin_dependency,
 ):
     assignment = db.get(ShiftAssignment, assignment_id)
     if assignment is None:
@@ -1033,7 +1088,7 @@ def admin_assignment_qr(
     assignment_id: int,
     request: Request,
     db: Session = db_dependency,
-    admin_user=admin_dependency,
+    admin_user=checkin_dependency,
 ):
     assignment = db.get(ShiftAssignment, assignment_id)
     if assignment is None:
@@ -1466,7 +1521,7 @@ def send_outbox_message_admin(
 
 @app.get("/admin/einstellungen/smtp", tags=["admin"])
 def smtp_configuration_form(
-    request: Request, db: Session = db_dependency, admin_user=admin_dependency
+    request: Request, db: Session = db_dependency, admin_user=strict_admin_dependency
 ):
     return templates.TemplateResponse(
         "admin_smtp.html",
@@ -1483,7 +1538,7 @@ def smtp_configuration_form(
 def smtp_configuration_submit(
     request: Request,
     db: Session = db_dependency,
-    admin_user=admin_dependency,
+    admin_user=strict_admin_dependency,
     host: Annotated[str, Form()] = "",
     port: Annotated[int, Form()] = 587,
     username: Annotated[str, Form()] = "",
@@ -1811,7 +1866,7 @@ def export_event_assignments(
 def checkin_submit(
     assignment_id: int,
     db: Session = db_dependency,
-    admin_user=admin_dependency,
+    admin_user=checkin_dependency,
     lanyard: Annotated[bool, Form()] = False,
     wristband: Annotated[bool, Form()] = False,
     radio: Annotated[bool, Form()] = False,
@@ -1838,7 +1893,7 @@ def checkin_submit(
 
 @app.post("/admin/check-in/{assignment_id}/check-out", tags=["admin"])
 def checkout_submit(
-    assignment_id: int, db: Session = db_dependency, admin_user=admin_dependency
+    assignment_id: int, db: Session = db_dependency, admin_user=checkin_dependency
 ):
     assignment = db.get(ShiftAssignment, assignment_id)
     if assignment is None:
@@ -1853,7 +1908,7 @@ def checkout_submit(
 @app.get("/admin/db", tags=["admin"])
 def admin_database_status(
     request: Request,
-    admin_user=admin_dependency,
+    admin_user=strict_admin_dependency,
 ):
     diagnostics = safe_database_diagnostics()
     return templates.TemplateResponse(
@@ -1891,6 +1946,27 @@ def debug_easyauth(request: Request):
     )
 
 
+@app.get("/debug/oidc", tags=["debug"])
+def debug_oidc(request: Request):
+    if not get_settings().debug:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    return JSONResponse(oidc_diagnostics(request))
+
+
+@app.get("/debug/config", tags=["debug"])
+def debug_config():
+    settings = get_settings()
+    if not settings.debug:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    return JSONResponse(
+        {
+            "auth_mode": settings.auth_mode,
+            "database_provider": safe_database_diagnostics()["database_type"],
+            "app_base_url_configured": bool(settings.app_base_url),
+        }
+    )
+
+
 @app.get("/debug/db", tags=["debug"])
 def debug_database():
     if not get_settings().debug:
@@ -1899,24 +1975,56 @@ def debug_database():
 
 
 @app.get("/auth/login", tags=["auth"])
-def login():
+async def login(request: Request):
     settings = get_settings()
     if settings.auth_mode == "easyauth":
         return RedirectResponse(
-            url="/.auth/login/aad?post_login_redirect_uri=/admin",
+            url="/.auth/login/aad?post_login_redirect_uri=/auth/post-login",
             status_code=status.HTTP_307_TEMPORARY_REDIRECT,
         )
+    if settings.auth_mode == "oidc":
+        return await begin_login(request)
     return RedirectResponse(
         url="/admin", status_code=status.HTTP_307_TEMPORARY_REDIRECT
     )
 
 
+def authenticated_landing(user, db: Session) -> str:
+    if any(user_has_permission(db, user, name) for name in ("admin", "manager")):
+        return "/admin"
+    if user_has_permission(db, user, "checkin"):
+        return "/admin/check-in"
+    return "/"
+
+
+@app.get("/auth/post-login", tags=["auth"])
+def post_login(request: Request, db: Session = db_dependency):
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    return RedirectResponse(
+        url=authenticated_landing(user, db),
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
+@app.get("/auth/callback", tags=["auth"])
+async def oidc_callback(request: Request, db: Session = db_dependency):
+    user = await complete_login(request)
+    return RedirectResponse(
+        url=authenticated_landing(user, db),
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
 @app.get("/auth/logout", tags=["auth"])
-def logout():
+def logout(request: Request):
     settings = get_settings()
     if settings.auth_mode == "easyauth":
         return RedirectResponse(
             url="/.auth/logout?post_logout_redirect_uri=/",
             status_code=status.HTTP_307_TEMPORARY_REDIRECT,
         )
+    if settings.auth_mode == "oidc":
+        clear_login(request)
     return RedirectResponse(url="/", status_code=status.HTTP_307_TEMPORARY_REDIRECT)

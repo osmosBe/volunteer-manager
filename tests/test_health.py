@@ -5,10 +5,9 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
 
-from app.auth.admin import is_authorized_admin
 from app.auth.easyauth import parse_easyauth_principal
 from app.auth.models import AuthenticatedUser
-from app.config.settings import Settings, get_settings, parse_csv_env
+from app.config.settings import get_settings, parse_csv_env
 from app.database.base import Base
 from app.database.session import create_database_engine, get_db
 from app.main import app
@@ -147,31 +146,6 @@ def test_easyauth_principal_parser_uses_fallback_headers() -> None:
     )
 
 
-def test_authorization_helper_allows_configured_email() -> None:
-    settings = Settings(auth_mode="easyauth", admin_allowed_emails="admin@example.org")
-
-    user = AuthenticatedUser(email="Admin@Example.Org")
-
-    assert is_authorized_admin(user, settings)
-
-
-def test_authorization_helper_allows_configured_group_if_present() -> None:
-    settings = Settings(auth_mode="easyauth", admin_allowed_group_ids="group-a,group-b")
-
-    user = AuthenticatedUser(groups=["group-b"])
-
-    assert is_authorized_admin(user, settings)
-
-
-def test_authorization_helper_denies_access_when_no_allowlist_configured() -> None:
-    settings = Settings(
-        auth_mode="easyauth", admin_allowed_emails="", admin_allowed_group_ids=""
-    )
-    user = AuthenticatedUser(email="admin@example.org", groups=["group-b"])
-
-    assert not is_authorized_admin(user, settings)
-
-
 def test_debug_easyauth_returns_404_when_debug_false(monkeypatch) -> None:
     _set_auth_env(monkeypatch, "disabled", debug=False)
     client = TestClient(app)
@@ -207,7 +181,7 @@ def test_debug_db_returns_safe_schema_diagnostics(monkeypatch, tmp_path) -> None
         "database_reachable": True,
         "schema_initialized": False,
         "current_revision": None,
-        "expected_revision": "20260815_0009",
+        "expected_revision": "20260816_0010",
         "migration_pending": True,
         "tables": {"events": False, "volunteers": False, "shifts": False},
         "diagnostic_error": None,
@@ -224,7 +198,7 @@ def test_admin_db_returns_200_when_database_is_unavailable(monkeypatch) -> None:
             "database_reachable": False,
             "schema_initialized": False,
             "current_revision": None,
-            "expected_revision": "20260815_0009",
+            "expected_revision": "20260816_0010",
             "migration_pending": None,
             "tables": {"events": False, "volunteers": False, "shifts": False},
             "diagnostic_error": "database_unreachable",
@@ -277,12 +251,7 @@ def test_debug_easyauth_returns_sanitized_data_when_debug_true(monkeypatch) -> N
         "groups": [],
         "claims": ["name", "preferred_username", "access_token"],
         "auth_mode": "easyauth",
-        "permissions_summary": {
-            "admin": False,
-            "checkin": False,
-            "manager": False,
-            "police": False,
-        },
+        "permissions_summary": {},
     }
     assert "super-secret-token" not in response.text
     assert header not in response.text
@@ -327,81 +296,7 @@ def test_parse_csv_env_handles_optional_group_allowlist_values(value, expected) 
     assert parse_csv_env(value) == expected
 
 
-def test_settings_parses_comma_separated_admin_allowed_emails() -> None:
-    settings = Settings(admin_allowed_emails="admin@example.org, ops@example.org, ")
-
-    assert settings.admin_allowed_emails == ["admin@example.org", "ops@example.org"]
-
-
-def test_settings_parses_single_admin_allowed_email() -> None:
-    settings = Settings(admin_allowed_emails="admin@example.org")
-
-    assert settings.admin_allowed_emails == ["admin@example.org"]
-
-
-def test_settings_normalizes_admin_allowed_emails_to_lowercase() -> None:
-    settings = Settings(admin_allowed_emails="Admin@Example.Org")
-
-    assert settings.admin_allowed_emails == ["admin@example.org"]
-
-
-def test_settings_parses_comma_separated_admin_allowed_group_ids() -> None:
-    settings = Settings(admin_allowed_group_ids="group-a, group-b, ")
-
-    assert settings.admin_allowed_group_ids == ["group-a", "group-b"]
-
-
-def test_settings_parses_single_admin_allowed_group_id_without_lowercasing() -> None:
-    settings = Settings(admin_allowed_group_ids="GroupA")
-
-    assert settings.admin_allowed_group_ids == ["GroupA"]
-
-
-@pytest.mark.parametrize(
-    ("env_name", "value", "expected_emails", "expected_groups"),
-    [
-        ("ADMIN_ALLOWED_EMAILS", None, [], []),
-        ("ADMIN_ALLOWED_EMAILS", "", [], []),
-        ("ADMIN_ALLOWED_EMAILS", "   ", [], []),
-        ("ADMIN_ALLOWED_EMAILS", ",", [], []),
-        (
-            "ADMIN_ALLOWED_EMAILS",
-            "admin@example.org",
-            ["admin@example.org"],
-            [],
-        ),
-        (
-            "ADMIN_ALLOWED_EMAILS",
-            "admin@example.org,second@example.org",
-            ["admin@example.org", "second@example.org"],
-            [],
-        ),
-        (
-            "ADMIN_ALLOWED_EMAILS",
-            " admin@example.org , second@example.org ",
-            ["admin@example.org", "second@example.org"],
-            [],
-        ),
-        ("ADMIN_ALLOWED_GROUP_IDS", None, [], []),
-        ("ADMIN_ALLOWED_GROUP_IDS", "", [], []),
-        ("ADMIN_ALLOWED_GROUP_IDS", "group1", [], ["group1"]),
-    ],
-)
-def test_settings_loads_supported_allowlist_env_values(
-    monkeypatch, env_name, value, expected_emails, expected_groups
-) -> None:
-    monkeypatch.delenv("ADMIN_ALLOWED_EMAILS", raising=False)
-    monkeypatch.delenv("ADMIN_ALLOWED_GROUP_IDS", raising=False)
-    if value is not None:
-        monkeypatch.setenv(env_name, value)
-
-    settings = Settings()
-
-    assert settings.admin_allowed_emails == expected_emails
-    assert settings.admin_allowed_group_ids == expected_groups
-
-
-def test_admin_route_returns_403_when_easyauth_allowlists_are_empty(
+def test_admin_route_returns_403_without_database_mapping_match(
     monkeypatch,
 ) -> None:
     _set_auth_env(monkeypatch, "easyauth")
@@ -421,31 +316,10 @@ def test_admin_route_returns_403_when_easyauth_allowlists_are_empty(
     assert response.status_code == 403
 
 
-@pytest.mark.parametrize(
-    ("email_value", "group_value"),
-    [
-        (None, None),
-        ("", ""),
-        ("   ", "   "),
-        (",", ","),
-        (",,,", ",,,"),
-        ("admin@example.org", "group1"),
-        ("admin@example.org,second@example.org", "group1,group2"),
-        (" admin@example.org , second@example.org ", " group1 , Group2 "),
-    ],
-)
-def test_application_startup_succeeds_with_supported_allowlist_configurations(
-    monkeypatch, email_value, group_value
-) -> None:
+def test_legacy_allowlist_environment_values_are_ignored(monkeypatch) -> None:
     monkeypatch.setenv("AUTH_MODE", "easyauth")
-    for env_name, value in (
-        ("ADMIN_ALLOWED_EMAILS", email_value),
-        ("ADMIN_ALLOWED_GROUP_IDS", group_value),
-    ):
-        if value is None:
-            monkeypatch.delenv(env_name, raising=False)
-        else:
-            monkeypatch.setenv(env_name, value)
+    monkeypatch.setenv("ADMIN_ALLOWED_EMAILS", "legacy@example.org")
+    monkeypatch.setenv("ADMIN_ALLOWED_GROUP_IDS", "legacy-group")
     get_settings.cache_clear()
 
     client = TestClient(app)

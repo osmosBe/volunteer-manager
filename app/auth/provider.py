@@ -3,6 +3,7 @@ from fastapi import Request
 from app.auth.easyauth import parse_easyauth_principal
 from app.auth.local import get_local_user
 from app.auth.models import AuthenticatedUser
+from app.auth.oidc import get_oidc_user
 from app.config.settings import get_settings
 
 
@@ -17,5 +18,8 @@ def get_current_user(request: Request) -> AuthenticatedUser | None:
     # Authentication / Authorization, and only when AUTH_MODE=easyauth.
     if settings.auth_mode == "easyauth":
         return parse_easyauth_principal(request.headers)
+
+    if settings.auth_mode == "oidc":
+        return get_oidc_user(request)
 
     return None

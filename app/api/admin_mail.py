@@ -10,7 +10,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
-from app.auth.permissions import require_permission
+from app.auth.permissions import require_any_permission
 from app.config.settings import get_settings
 from app.database.session import get_db
 from app.mail.models import MailMessage, MailRecipient
@@ -29,7 +29,7 @@ email_templates = Environment(
     loader=FileSystemLoader("app/templates/email"),
     autoescape=select_autoescape(["html", "xml"]),
 )
-admin_dependency = Depends(require_permission("admin"))
+admin_dependency = Depends(require_any_permission(["admin", "manager"]))
 db_dependency = Depends(get_db)
 
 

@@ -300,7 +300,7 @@ def test_mail_diagnostics_never_exposes_secrets_or_tokens():
     assert "access_token" not in serialized
 
 
-def test_admin_mail_routes_require_admin_permission(monkeypatch):
+def test_admin_mail_routes_require_admin_or_manager_permission(monkeypatch):
     monkeypatch.setenv("AUTH_MODE", "easyauth")
     get_settings.cache_clear()
     try:
@@ -316,8 +316,8 @@ def test_admin_mail_routes_require_admin_permission(monkeypatch):
             json.dumps(
                 {
                     "claims": [
-                        {"typ": "roles", "val": "Volunteer.Manager"},
-                        {"typ": "email", "val": "manager@example.org"},
+                        {"typ": "roles", "val": "Volunteer.Police"},
+                        {"typ": "email", "val": "police@example.org"},
                     ]
                 }
             ).encode()
