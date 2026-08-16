@@ -89,6 +89,9 @@ def test_admin_allows_access_when_auth_mode_disabled(monkeypatch, tmp_path) -> N
     assert response.status_code == 200
     assert "ST. PRIDE Volunteer Management – Admin Dashboard" in response.text
     assert "Local Developer" in response.text
+    assert 'href="/admin/permissions"' in response.text
+    assert 'href="/admin/db"' in response.text
+    assert 'href="/admin/einstellungen/smtp"' in response.text
 
 
 def test_easyauth_principal_parser_handles_valid_client_principal() -> None:
