@@ -75,6 +75,19 @@
   };
 
   const nativeMessage = (control) => {
+    const rangeStartDateName = control.dataset.rangeStartDate;
+    if (rangeStartDateName && control.value) {
+      const startDate = control.form?.elements.namedItem(rangeStartDateName);
+      const startTime = control.form?.elements.namedItem(control.dataset.rangeStartTime);
+      const endTime = control.form?.elements.namedItem(control.dataset.rangeEndTime);
+      if (startDate?.value) {
+        const startValue = `${startDate.value}T${startTime?.value || "00:00:00"}`;
+        const endValue = `${control.value}T${endTime?.value || "23:59:59.999"}`;
+        if (endValue <= startValue) {
+          return control.dataset.rangeMessage || "Das Ende muss nach dem Beginn liegen.";
+        }
+      }
+    }
     const afterName = control.dataset.after;
     if (afterName && control.value) {
       const previous = control.form?.elements.namedItem(afterName);
