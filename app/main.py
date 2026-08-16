@@ -35,6 +35,11 @@ from app.auth.provider import get_current_user
 from app.config.settings import get_settings
 from app.database.diagnostics import safe_database_diagnostics
 from app.database.session import database_status, get_db
+from app.forms.query_filters import (
+    QueryFilterError,
+    parse_checkbox,
+    parse_optional_id,
+)
 from app.models import (
     AgeGroup,
     AssignmentStatus,
@@ -1203,10 +1208,27 @@ def promote_waitlist(
 def checkin_page(
     request: Request,
     query: str = "",
-    event_id: int | None = None,
+    event_id: str | None = None,
     db: Session = db_dependency,
     admin_user=checkin_dependency,
 ):
+    events = list(db.scalars(select(Event).order_by(Event.name)))
+    filter_error = None
+    status_code = 200
+    try:
+        parsed_event_id = parse_optional_id(
+            event_id, field_name="event_id", label="Die Veranstaltung"
+        )
+        if parsed_event_id is not None and not any(
+            event.id == parsed_event_id for event in events
+        ):
+            raise QueryFilterError(
+                "event_id", "Die ausgewählte Veranstaltung wurde nicht gefunden."
+            )
+    except QueryFilterError as exc:
+        parsed_event_id = None
+        filter_error = str(exc)
+        status_code = 422
     statement = (
         select(ShiftAssignment)
         .join(Volunteer)
@@ -1218,9 +1240,9 @@ def checkin_page(
         )
         .order_by(Shift.starts_at, Volunteer.last_name, Volunteer.first_name)
     )
-    if event_id is not None:
-        statement = statement.where(Shift.event_id == event_id)
-    if query.strip():
+    if parsed_event_id is not None:
+        statement = statement.where(Shift.event_id == parsed_event_id)
+    if query.strip() and not filter_error:
         pattern = f"%{query.strip()}%"
         statement = statement.where(
             Volunteer.first_name.ilike(pattern)
@@ -1228,17 +1250,18 @@ def checkin_page(
             | Volunteer.email.ilike(pattern)
             | Volunteer.phone.ilike(pattern)
         )
-    assignments = list(db.scalars(statement))
+    assignments = [] if filter_error else list(db.scalars(statement))
     return templates.TemplateResponse(
         "admin_checkin.html",
         {
             "request": request,
             "assignments": assignments,
-            "events": list(db.scalars(select(Event).order_by(Event.name))),
+            "events": events,
             "query": query,
-            "event_id": event_id,
-            "error": None,
+            "event_id": parsed_event_id,
+            "filter_error": filter_error,
         },
+        status_code=status_code,
     )
 
 
@@ -1279,15 +1302,48 @@ def admin_assignment_qr(
 def volunteer_list(
     request: Request,
     query: str = "",
-    event_id: int | None = None,
+    event_id: str | None = None,
     assignment_status: str = "",
     email_verified: str = "",
-    u18: bool = False,
+    u18: str | None = None,
     db: Session = db_dependency,
     admin_user=admin_dependency,
 ):
+    events = list(db.scalars(select(Event).order_by(Event.name)))
+    filter_error = None
+    status_code = 200
+    try:
+        parsed_event_id = parse_optional_id(
+            event_id, field_name="event_id", label="Die Veranstaltung"
+        )
+        if parsed_event_id is not None and not any(
+            event.id == parsed_event_id for event in events
+        ):
+            raise QueryFilterError(
+                "event_id", "Die ausgewählte Veranstaltung wurde nicht gefunden."
+            )
+        parsed_u18 = parse_checkbox(u18, field_name="u18", label="Der U18-Filter")
+        parsed_assignment_status = (
+            AssignmentStatus(assignment_status) if assignment_status else None
+        )
+        if email_verified not in {"", "verified", "pending"}:
+            raise QueryFilterError(
+                "email_verified", "Der E-Mail-Statusfilter ist ungültig."
+            )
+    except QueryFilterError as exc:
+        parsed_event_id = None
+        parsed_u18 = False
+        parsed_assignment_status = None
+        filter_error = str(exc)
+        status_code = 422
+    except ValueError:
+        parsed_event_id = None
+        parsed_u18 = False
+        parsed_assignment_status = None
+        filter_error = "Der Zuteilungsstatusfilter ist ungültig."
+        status_code = 422
     statement = select(Volunteer).order_by(Volunteer.last_name, Volunteer.first_name)
-    if query.strip():
+    if query.strip() and not filter_error:
         pattern = f"%{query.strip()}%"
         statement = statement.where(
             Volunteer.first_name.ilike(pattern)
@@ -1295,41 +1351,37 @@ def volunteer_list(
             | Volunteer.email.ilike(pattern)
             | Volunteer.phone.ilike(pattern)
         )
-    if event_id is not None:
-        statement = statement.where(Volunteer.event_id == event_id)
-    if u18:
+    if parsed_event_id is not None:
+        statement = statement.where(Volunteer.event_id == parsed_event_id)
+    if parsed_u18:
         statement = statement.where(Volunteer.age_group != AgeGroup.adult)
-    if assignment_status:
-        try:
-            parsed_status = AssignmentStatus(assignment_status)
-        except ValueError as exc:
-            raise HTTPException(
-                status_code=422, detail="Ungültiger Statusfilter"
-            ) from exc
+    if parsed_assignment_status is not None:
         statement = statement.join(ShiftAssignment).where(
-            ShiftAssignment.assignment_status == parsed_status
+            ShiftAssignment.assignment_status == parsed_assignment_status
         )
     if email_verified == "verified":
         statement = statement.where(Volunteer.email_verified_at.is_not(None))
     elif email_verified == "pending":
         statement = statement.where(Volunteer.email_verified_at.is_(None))
-    elif email_verified:
-        raise HTTPException(status_code=422, detail="Ungültiger E-Mail-Statusfilter")
     return templates.TemplateResponse(
         "admin_volunteer_list.html",
         {
             "request": request,
-            "volunteers": list(db.scalars(statement).unique()),
+            "volunteers": (
+                [] if filter_error else list(db.scalars(statement).unique())
+            ),
             "query": query,
-            "events": list(db.scalars(select(Event).order_by(Event.name))),
-            "event_id": event_id,
+            "events": events,
+            "event_id": parsed_event_id,
             "assignment_status": assignment_status,
             "email_verified": email_verified,
             "assignment_statuses": list(AssignmentStatus),
             "volunteer_statuses": list(VolunteerStatus),
             "briefings": list(db.scalars(select(Briefing).order_by(Briefing.title))),
-            "u18": u18,
+            "u18": parsed_u18,
+            "filter_error": filter_error,
         },
+        status_code=status_code,
     )
 
 

@@ -10,6 +10,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.database.session import get_db
+from app.forms.query_filters import (
+    QueryFilterError,
+    parse_checkbox,
+    parse_optional_date,
+    parse_optional_id,
+    parse_optional_time,
+)
 from app.models import Event, EventStatus, Shift, ShiftStatus
 from app.services.mail_delivery import (
     send_pending_automatic_messages,
@@ -141,6 +148,51 @@ def filtered_open_shifts(
     return sorted(shifts, key=lambda shift: shift.starts_at), places
 
 
+def _parse_shift_filters(
+    event: Event,
+    *,
+    team_id: str | None,
+    day: str | None,
+    time_from: str | None,
+    time_to: str | None,
+    available_only: str | None,
+) -> dict[str, int | date | time | bool | None]:
+    parsed_team_id = parse_optional_id(
+        team_id, field_name="team_id", label="Der Arbeitsbereich"
+    )
+    if parsed_team_id is not None and not any(
+        team.id == parsed_team_id for team in event.teams
+    ):
+        raise QueryFilterError(
+            "team_id", "Der Arbeitsbereich gehört nicht zu dieser Veranstaltung."
+        )
+    return {
+        "team_id": parsed_team_id,
+        "day": parse_optional_date(day, field_name="day", label="Der Tag"),
+        "time_from": parse_optional_time(
+            time_from, field_name="time_from", label="Die Startzeit"
+        ),
+        "time_to": parse_optional_time(
+            time_to, field_name="time_to", label="Die Endzeit"
+        ),
+        "available_only": parse_checkbox(
+            available_only,
+            field_name="available_only",
+            label="Der Verfügbarkeitsfilter",
+        ),
+    }
+
+
+def _empty_shift_filters() -> dict[str, int | date | time | bool | None]:
+    return {
+        "team_id": None,
+        "day": None,
+        "time_from": None,
+        "time_to": None,
+        "available_only": False,
+    }
+
+
 @router.get("/")
 def landing_page(request: Request, db: DatabaseSession):
     return templates.TemplateResponse(
@@ -153,21 +205,36 @@ def event_detail(
     slug: str,
     request: Request,
     db: DatabaseSession,
-    team_id: int | None = None,
-    day: date | None = None,
-    time_from: time | None = None,
-    time_to: time | None = None,
-    available_only: bool = False,
+    team_id: str | None = None,
+    day: str | None = None,
+    time_from: str | None = None,
+    time_to: str | None = None,
+    available_only: str | None = None,
 ):
     event = get_public_event(db, slug)
+    filter_error = None
+    status_code = 200
+    try:
+        filters = _parse_shift_filters(
+            event,
+            team_id=team_id,
+            day=day,
+            time_from=time_from,
+            time_to=time_to,
+            available_only=available_only,
+        )
+    except QueryFilterError as exc:
+        filters = _empty_shift_filters()
+        filter_error = str(exc)
+        status_code = 422
     shifts, places = filtered_open_shifts(
         db,
         event,
-        team_id=team_id,
-        day=day,
-        time_from=time_from,
-        time_to=time_to,
-        available_only=available_only,
+        team_id=filters["team_id"],
+        day=filters["day"],
+        time_from=filters["time_from"],
+        time_to=filters["time_to"],
+        available_only=bool(filters["available_only"]),
     )
     return templates.TemplateResponse(
         request,
@@ -176,14 +243,11 @@ def event_detail(
             "event": event,
             "shifts": shifts,
             "places": places,
-            "filters": {
-                "team_id": team_id,
-                "day": day,
-                "time_from": time_from,
-                "time_to": time_to,
-                "available_only": available_only,
-            },
+            "filters": filters,
+            "filter_error": filter_error,
+            "filter_query": request.url.query if not filter_error else "",
         },
+        status_code=status_code,
     )
 
 
@@ -192,18 +256,43 @@ def registration_form(
     slug: str,
     request: Request,
     db: DatabaseSession,
-    team_id: int | None = None,
-    day: date | None = None,
-    time_from: time | None = None,
-    time_to: time | None = None,
-    available_only: bool = False,
-    shift_id: int | None = None,
+    team_id: str | None = None,
+    day: str | None = None,
+    time_from: str | None = None,
+    time_to: str | None = None,
+    available_only: str | None = None,
+    shift_id: str | None = None,
 ):
     event = get_public_event(db, slug)
+    try:
+        filters = _parse_shift_filters(
+            event,
+            team_id=team_id,
+            day=day,
+            time_from=time_from,
+            time_to=time_to,
+            available_only=available_only,
+        )
+        parsed_shift_id = parse_optional_id(
+            shift_id, field_name="shift_id", label="Die ausgewählte Schicht"
+        )
+        if parsed_shift_id is not None and not any(
+            shift.id == parsed_shift_id for shift in event.shifts
+        ):
+            raise QueryFilterError(
+                "shift_id", "Die ausgewählte Schicht gehört nicht zur Veranstaltung."
+            )
+        filter_error = None
+        status_code = 200
+    except QueryFilterError as exc:
+        filters = _empty_shift_filters()
+        parsed_shift_id = None
+        filter_error = str(exc)
+        status_code = 422
     selected_shift_ids = {
         shift.id
         for shift in event.shifts
-        if shift.id == shift_id
+        if shift.id == parsed_shift_id
         and shift.status == ShiftStatus.open
         and (available_places(db, shift) > 0 or shift.waitlist_capacity is not None)
     }
@@ -213,13 +302,15 @@ def registration_form(
         _registration_form_context(
             db,
             event,
-            team_id=team_id,
-            day=day,
-            time_from=time_from,
-            time_to=time_to,
-            available_only=available_only,
+            team_id=filters["team_id"],
+            day=filters["day"],
+            time_from=filters["time_from"],
+            time_to=filters["time_to"],
+            available_only=bool(filters["available_only"]),
             selected_shift_ids=selected_shift_ids,
+            error=filter_error,
         ),
+        status_code=status_code,
     )
 
 
