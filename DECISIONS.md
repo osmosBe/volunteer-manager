@@ -1,18 +1,27 @@
 # Architecture decisions
 
-## Azure Easy Auth remains the authentication boundary
+## Authentication is provider-neutral
 
-The application does not implement another login flow. Azure Container Apps
-Easy Auth authenticates requests; the application maps trusted Easy Auth
-identity headers to permissions. `AUTH_MODE=disabled` exists only for local and
-temporary DEV work and must not be used for shared or production operation.
+The application supports Azure Container Apps EasyAuth and standards-based
+OpenID Connect behind one authentication-provider boundary. Every provider
+produces the same `AuthenticatedUser`; routes and database-backed permission
+checks do not contain provider-specific role logic. EasyAuth remains the Azure
+deployment boundary, while generic OIDC enables self-hosted installations.
+`AUTH_MODE=disabled` exists only for isolated local development and CI and must
+not be exposed to an untrusted network.
+
+Generic OIDC sessions are server-side but currently process-local. OIDC
+deployments therefore run one application replica until a shared session store
+is introduced.
 
 ## PostgreSQL is the shared Azure database
 
 Azure deployments use PostgreSQL Flexible Server through `DATABASE_URL` and
-psycopg 3. SQLite remains a lightweight local/test option only. Azure Files is
-not a supported database transport; existing file shares are retained for
-possible future exports/uploads and are not deleted automatically.
+psycopg 3. SQLite remains a lightweight option for local development and small
+single-replica self-hosted installations. SQLite must use local storage; Azure
+Files and other network filesystems are not supported database transports.
+Existing file shares are retained for possible future exports/uploads and are
+not deleted automatically.
 
 Alembic is the production schema authority. The web image starts deterministically
 without migrating or seeding. A manual Container Apps Job runs the same image and
@@ -72,6 +81,7 @@ after strict active-content and external-resource validation.
 
 - Replace PostgreSQL password authentication with managed identity/Entra auth
   after operational validation.
+- Replace the process-local OIDC session store before horizontal scaling.
 - Insert the persistent outbox between business workflows and `MailService`.
 - Add finer-grained Entra groups and automated data retention.
 - Add dedicated CSRF tokens if the app is exposed without the Easy Auth
