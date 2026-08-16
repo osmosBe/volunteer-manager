@@ -119,6 +119,8 @@ def ensure_demo_data(db: Session) -> Event:
     event.public_meeting_point = "ST.-PRIDE-Demo-Infostand"
     event.registration_opens_at = now - timedelta(hours=1)
     event.registration_closes_at = event_start - timedelta(hours=2)
+    event.registration_open_time_is_set = True
+    event.registration_close_time_is_set = True
     event.status = EventStatus.registration_open
     event.is_public = True
     event.allows_minors = True

@@ -46,6 +46,14 @@ def test_admin_can_create_plan_edit_and_duplicate_event(tmp_path):
                 "start_time": start.strftime("%H:%M"),
                 "end_date": (start + timedelta(hours=8)).date().isoformat(),
                 "end_time": (start + timedelta(hours=8)).strftime("%H:%M"),
+                "registration_open_date": (start - timedelta(days=9))
+                .date()
+                .isoformat(),
+                "registration_open_time": "08:00",
+                "registration_close_date": (start - timedelta(days=1))
+                .date()
+                .isoformat(),
+                "registration_close_time": "18:00",
                 "status": "registration_open",
                 "is_public": "true",
                 "short_description": "Kurz und klar",
@@ -241,6 +249,10 @@ def test_event_dates_are_required_while_times_are_optional(tmp_path):
                 "start_time": "",
                 "end_date": "2030-05-11",
                 "end_time": "",
+                "registration_open_date": "2030-05-01",
+                "registration_open_time": "",
+                "registration_close_date": "2030-05-09",
+                "registration_close_time": "",
                 "status": "registration_open",
                 "is_public": "true",
             },
@@ -256,6 +268,10 @@ def test_event_dates_are_required_while_times_are_optional(tmp_path):
         assert 'name="start_time" value=""' in edit_page.text
         assert 'name="end_date" value="2030-05-11"' in edit_page.text
         assert 'name="end_time" value=""' in edit_page.text
+        assert 'name="registration_open_date" value="2030-05-01"' in edit_page.text
+        assert 'name="registration_open_time" value=""' in edit_page.text
+        assert 'name="registration_close_date" value="2030-05-09"' in edit_page.text
+        assert 'name="registration_close_time" value=""' in edit_page.text
         assert public_page.status_code == 200
         assert "10.05.2030" in public_page.text
         assert "11.05.2030" in public_page.text
@@ -268,6 +284,12 @@ def test_event_dates_are_required_while_times_are_optional(tmp_path):
             assert event.ends_at == datetime(2030, 5, 11, 23, 59, 59, 999999)
             assert event.start_time_is_set is False
             assert event.end_time_is_set is False
+            assert event.registration_opens_at == datetime(2030, 5, 1, 0, 0)
+            assert event.registration_closes_at == datetime(
+                2030, 5, 9, 23, 59, 59, 999999
+            )
+            assert event.registration_open_time_is_set is False
+            assert event.registration_close_time_is_set is False
 
         updated = client.post(
             f"/admin/veranstaltungen/{event_id}/bearbeiten",
@@ -278,6 +300,10 @@ def test_event_dates_are_required_while_times_are_optional(tmp_path):
                 "start_time": "09:30",
                 "end_date": "2030-05-11",
                 "end_time": "",
+                "registration_open_date": "2030-05-01",
+                "registration_open_time": "08:30",
+                "registration_close_date": "2030-05-09",
+                "registration_close_time": "",
                 "status": "registration_open",
                 "is_public": "true",
             },
@@ -289,6 +315,9 @@ def test_event_dates_are_required_while_times_are_optional(tmp_path):
             assert event.starts_at == datetime(2030, 5, 10, 9, 30)
             assert event.start_time_is_set is True
             assert event.end_time_is_set is False
+            assert event.registration_opens_at == datetime(2030, 5, 1, 8, 30)
+            assert event.registration_open_time_is_set is True
+            assert event.registration_close_time_is_set is False
 
         missing_date = client.post(
             "/admin/veranstaltungen/neu",
@@ -330,10 +359,37 @@ def test_event_dates_are_required_while_times_are_optional(tmp_path):
                 "start_time": "",
                 "end_date": "2030-06-01",
                 "end_time": "",
+                "registration_open_date": "2030-05-01",
+                "registration_open_time": "",
+                "registration_close_date": "2030-05-31",
+                "registration_close_time": "",
             },
             follow_redirects=False,
         )
         assert single_day.status_code == 303
+
+        invalid_registration_order = client.post(
+            "/admin/veranstaltungen/neu",
+            data={
+                "name": "Ungültiges Anmeldefenster",
+                "slug": "ungueltiges-anmeldefenster",
+                "start_date": "2030-06-01",
+                "start_time": "",
+                "end_date": "2030-06-01",
+                "end_time": "",
+                "registration_open_date": "2030-05-15",
+                "registration_open_time": "12:00",
+                "registration_close_date": "2030-05-15",
+                "registration_close_time": "11:00",
+            },
+        )
+        assert invalid_registration_order.status_code == 422
+        assert "Das Ende der Anmeldung muss nach deren Beginn liegen." in (
+            invalid_registration_order.text
+        )
+        assert 'data-error-for="registration_close_date"' in (
+            invalid_registration_order.text
+        )
     finally:
         app.dependency_overrides.clear()
 

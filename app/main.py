@@ -289,8 +289,10 @@ _EVENT_FORM_FIELDS = (
     "short_description",
     "description",
     "public_meeting_point",
-    "registration_opens_at",
-    "registration_closes_at",
+    "registration_open_date",
+    "registration_open_time",
+    "registration_close_date",
+    "registration_close_time",
     "contact_name",
     "contact_email",
     "contact_phone",
@@ -331,7 +333,17 @@ def _event_model_form_values(event: Event | None) -> dict[str, object]:
     values = {
         field: (event.status if field == "status" else getattr(event, field))
         for field in _EVENT_FORM_FIELDS
-        if field not in {"start_date", "start_time", "end_date", "end_time"}
+        if field
+        not in {
+            "start_date",
+            "start_time",
+            "end_date",
+            "end_time",
+            "registration_open_date",
+            "registration_open_time",
+            "registration_close_date",
+            "registration_close_time",
+        }
     }
     values.update(
         {
@@ -345,6 +357,26 @@ def _event_model_form_values(event: Event | None) -> dict[str, object]:
             "end_time": (
                 event.ends_at.time()
                 if event.ends_at and event.end_time_is_set
+                else None
+            ),
+            "registration_open_date": (
+                event.registration_opens_at.date()
+                if event.registration_opens_at
+                else None
+            ),
+            "registration_open_time": (
+                event.registration_opens_at.time()
+                if event.registration_opens_at and event.registration_open_time_is_set
+                else None
+            ),
+            "registration_close_date": (
+                event.registration_closes_at.date()
+                if event.registration_closes_at
+                else None
+            ),
+            "registration_close_time": (
+                event.registration_closes_at.time()
+                if event.registration_closes_at and event.registration_close_time_is_set
                 else None
             ),
         }
@@ -418,6 +450,88 @@ def _parse_event_schedule(
     )
 
 
+def _parse_registration_window(
+    *,
+    open_date_value: str,
+    open_time_value: str,
+    close_date_value: str,
+    close_time_value: str,
+) -> tuple[datetime | None, datetime | None, bool, bool, dict[str, str]]:
+    """Build registration bounds while retaining optional-time semantics."""
+
+    field_errors: dict[str, str] = {}
+    parsed: dict[str, date | time | None] = {}
+    parsers = (
+        (
+            "registration_open_date",
+            parse_optional_date,
+            open_date_value,
+            "Das Datum für den Anmeldestart",
+        ),
+        (
+            "registration_open_time",
+            parse_optional_time,
+            open_time_value,
+            "Die Uhrzeit für den Anmeldestart",
+        ),
+        (
+            "registration_close_date",
+            parse_optional_date,
+            close_date_value,
+            "Das Datum für das Anmeldeende",
+        ),
+        (
+            "registration_close_time",
+            parse_optional_time,
+            close_time_value,
+            "Die Uhrzeit für das Anmeldeende",
+        ),
+    )
+    for field_name, parser, value, label in parsers:
+        try:
+            parsed[field_name] = parser(value, field_name=field_name, label=label)
+        except QueryFilterError as exc:
+            parsed[field_name] = None
+            field_errors[field_name] = str(exc)
+
+    if not open_date_value.strip() and "registration_open_date" not in field_errors:
+        field_errors["registration_open_date"] = (
+            "Bitte gib ein Datum für den Anmeldestart ein."
+        )
+    if not close_date_value.strip() and "registration_close_date" not in field_errors:
+        field_errors["registration_close_date"] = (
+            "Bitte gib ein Datum für das Anmeldeende ein."
+        )
+    if field_errors:
+        return None, None, False, False, field_errors
+
+    parsed_open_date = parsed["registration_open_date"]
+    parsed_close_date = parsed["registration_close_date"]
+    assert isinstance(parsed_open_date, date)
+    assert isinstance(parsed_close_date, date)
+    parsed_open_time = parsed["registration_open_time"]
+    parsed_close_time = parsed["registration_close_time"]
+    opens_at = datetime.combine(
+        parsed_open_date,
+        parsed_open_time if isinstance(parsed_open_time, time) else time.min,
+    )
+    closes_at = datetime.combine(
+        parsed_close_date,
+        parsed_close_time if isinstance(parsed_close_time, time) else time.max,
+    )
+    if closes_at <= opens_at:
+        field_errors["registration_close_date"] = (
+            "Das Ende der Anmeldung muss nach deren Beginn liegen."
+        )
+    return (
+        opens_at,
+        closes_at,
+        bool(open_time_value.strip()),
+        bool(close_time_value.strip()),
+        field_errors,
+    )
+
+
 def _render_event_form(
     request: Request,
     event: Event | None,
@@ -461,8 +575,10 @@ def create_event(
     short_description: Annotated[str, Form()] = "",
     description: Annotated[str, Form()] = "",
     public_meeting_point: Annotated[str, Form()] = "",
-    registration_opens_at: Annotated[datetime | None, Form()] = None,
-    registration_closes_at: Annotated[datetime | None, Form()] = None,
+    registration_open_date: Annotated[str, Form()] = "",
+    registration_open_time: Annotated[str, Form()] = "",
+    registration_close_date: Annotated[str, Form()] = "",
+    registration_close_time: Annotated[str, Form()] = "",
     contact_name: Annotated[str, Form()] = "",
     contact_email: Annotated[str, Form()] = "",
     contact_phone: Annotated[str, Form()] = "",
@@ -486,8 +602,10 @@ def create_event(
         short_description=short_description,
         description=description,
         public_meeting_point=public_meeting_point,
-        registration_opens_at=registration_opens_at,
-        registration_closes_at=registration_closes_at,
+        registration_open_date=registration_open_date,
+        registration_open_time=registration_open_time,
+        registration_close_date=registration_close_date,
+        registration_close_time=registration_close_time,
         contact_name=contact_name,
         contact_email=contact_email,
         contact_phone=contact_phone,
@@ -507,6 +625,19 @@ def create_event(
             end_time_value=end_time,
         )
     )
+    (
+        registration_opens_at,
+        registration_closes_at,
+        registration_open_time_is_set,
+        registration_close_time_is_set,
+        registration_errors,
+    ) = _parse_registration_window(
+        open_date_value=registration_open_date,
+        open_time_value=registration_open_time,
+        close_date_value=registration_close_date,
+        close_time_value=registration_close_time,
+    )
+    field_errors.update(registration_errors)
     if not name.strip():
         field_errors["name"] = "Bitte gib einen Titel ein."
     if not slug.strip():
@@ -516,18 +647,6 @@ def create_event(
             request,
             None,
             field_errors=field_errors,
-            form_values=form_values,
-            status_code=422,
-        )
-    if (
-        registration_opens_at
-        and registration_closes_at
-        and registration_closes_at <= registration_opens_at
-    ):
-        return _render_event_form(
-            request,
-            None,
-            error="Das Ende der Anmeldung muss nach deren Beginn liegen.",
             form_values=form_values,
             status_code=422,
         )
@@ -575,6 +694,8 @@ def create_event(
         public_meeting_point=public_meeting_point.strip() or None,
         registration_opens_at=registration_opens_at,
         registration_closes_at=registration_closes_at,
+        registration_open_time_is_set=registration_open_time_is_set,
+        registration_close_time_is_set=registration_close_time_is_set,
         contact_name=contact_name.strip() or None,
         contact_email=normalized_contact_email,
         contact_phone=contact_phone.strip() or None,
@@ -649,8 +770,10 @@ def edit_event_submit(
     short_description: Annotated[str, Form()] = "",
     description: Annotated[str, Form()] = "",
     public_meeting_point: Annotated[str, Form()] = "",
-    registration_opens_at: Annotated[datetime | None, Form()] = None,
-    registration_closes_at: Annotated[datetime | None, Form()] = None,
+    registration_open_date: Annotated[str, Form()] = "",
+    registration_open_time: Annotated[str, Form()] = "",
+    registration_close_date: Annotated[str, Form()] = "",
+    registration_close_time: Annotated[str, Form()] = "",
     contact_name: Annotated[str, Form()] = "",
     contact_email: Annotated[str, Form()] = "",
     contact_phone: Annotated[str, Form()] = "",
@@ -677,8 +800,10 @@ def edit_event_submit(
         short_description=short_description,
         description=description,
         public_meeting_point=public_meeting_point,
-        registration_opens_at=registration_opens_at,
-        registration_closes_at=registration_closes_at,
+        registration_open_date=registration_open_date,
+        registration_open_time=registration_open_time,
+        registration_close_date=registration_close_date,
+        registration_close_time=registration_close_time,
         contact_name=contact_name,
         contact_email=contact_email,
         contact_phone=contact_phone,
@@ -698,20 +823,25 @@ def edit_event_submit(
             end_time_value=end_time,
         )
     )
+    (
+        registration_opens_at,
+        registration_closes_at,
+        registration_open_time_is_set,
+        registration_close_time_is_set,
+        registration_errors,
+    ) = _parse_registration_window(
+        open_date_value=registration_open_date,
+        open_time_value=registration_open_time,
+        close_date_value=registration_close_date,
+        close_time_value=registration_close_time,
+    )
+    field_errors.update(registration_errors)
     error = None
     if not name.strip():
         field_errors["name"] = "Bitte gib einen Titel ein."
     if not slug.strip():
         field_errors["slug"] = "Bitte gib ein URL-Kürzel ein."
-    if (
-        registration_opens_at
-        and registration_closes_at
-        and registration_closes_at <= registration_opens_at
-    ):
-        error = "Das Ende der Anmeldung muss nach deren Beginn liegen."
-    elif db.scalar(
-        select(Event).where(Event.slug == slug.strip(), Event.id != event.id)
-    ):
+    if db.scalar(select(Event).where(Event.slug == slug.strip(), Event.id != event.id)):
         error = "Dieses URL-Kürzel wird bereits verwendet."
     try:
         event_status = EventStatus(status_value)
@@ -746,6 +876,8 @@ def edit_event_submit(
     event.public_meeting_point = public_meeting_point.strip() or None
     event.registration_opens_at = registration_opens_at
     event.registration_closes_at = registration_closes_at
+    event.registration_open_time_is_set = registration_open_time_is_set
+    event.registration_close_time_is_set = registration_close_time_is_set
     event.contact_name = contact_name.strip() or None
     event.contact_email = normalized_contact_email
     event.contact_phone = contact_phone.strip() or None
