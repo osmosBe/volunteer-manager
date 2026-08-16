@@ -43,6 +43,9 @@ param deployStorage bool = true
 @description('Show a global warning that the application is running in demo mode.')
 param demoMode bool = false
 
+@description('Application name shown in page titles and administration views.')
+param appName string = 'Volunteer Manager'
+
 @description('Transactional mail provider. Console performs no external delivery.')
 @allowed([
   'console'
@@ -54,7 +57,7 @@ param mailProvider string = 'console'
 param mailFromAddress string = ''
 
 @description('Display name used for transactional mail.')
-param mailFromName string = 'ST. PRIDE Volunteer Manager'
+param mailFromName string = 'Volunteer Manager'
 
 @description('Optional Reply-To address.')
 param mailReplyTo string = ''
@@ -86,7 +89,7 @@ var generatedPostgresName = take('${namePrefix}-${environmentName}-pg-${suffix}'
 var generatedStorageName = take('${normalizedPrefix}${environmentName}${suffix}', 24)
 var workspaceName = '${namePrefix}-${environmentName}-logs'
 var tags = {
-  application: 'st-pride-volunteer-manager'
+  application: 'volunteer-manager'
   environment: environmentName
   managedBy: 'bicep'
 }
@@ -160,6 +163,7 @@ module containerApp 'modules/container-app.bicep' = if (empty(existingContainerA
     registryPassword: registryCredentials.passwords[0].value
     databaseUrl: databaseUrl
     demoMode: demoMode
+    appName: appName
     mailProvider: mailProvider
     mailFromAddress: mailFromAddress
     mailFromName: mailFromName

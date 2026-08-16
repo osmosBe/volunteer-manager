@@ -1,6 +1,7 @@
 import base64
 import json
 from io import BytesIO
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -87,6 +88,56 @@ def test_default_logo_and_admin_branding_page(branding_app):
     assert 'href="/admin/branding"' in dashboard.text
 
 
+def test_bundled_logo_uses_neutral_path_and_is_served(branding_app):
+    client, _ = branding_app
+
+    logo = client.get(DEFAULT_LOGO_URL)
+    page = client.get("/")
+
+    assert DEFAULT_LOGO_URL == "/static/images/logo.png"
+    assert logo.status_code == 200
+    assert logo.headers["content-type"] == "image/png"
+    assert DEFAULT_LOGO_URL in page.text
+    assert "Volunteer Manager" in page.text
+
+
+def test_repository_contains_no_legacy_organization_branding():
+    root = Path(__file__).resolve().parents[1]
+    forbidden = (
+        bytes((112, 114, 105, 100, 101)).decode("ascii"),
+        bytes((115, 116, 112, 114, 105, 100, 101)).decode("ascii"),
+        bytes((115, 116, 45, 112, 114, 105, 100, 101)).decode("ascii"),
+    )
+    suffixes = {
+        ".example",
+        ".html",
+        ".json",
+        ".md",
+        ".ps1",
+        ".py",
+        ".toml",
+        ".yaml",
+        ".yml",
+    }
+    paths = [root / "LICENSE"]
+    paths.extend(
+        path
+        for path in root.rglob("*")
+        if path.is_file()
+        and path.suffix in suffixes
+        and ".git" not in path.parts
+        and "__pycache__" not in path.parts
+        and ".venv" not in path.parts
+        and "venv" not in path.parts
+        and "node_modules" not in path.parts
+    )
+
+    for path in paths:
+        content = path.read_text(encoding="utf-8").casefold()
+        for value in forbidden:
+            assert value not in content, f"legacy branding remains in {path}"
+
+
 def test_logo_delivery_falls_back_when_branding_database_query_fails(
     branding_app, monkeypatch
 ):
@@ -107,7 +158,7 @@ def test_logo_delivery_falls_back_when_branding_database_query_fails(
 def test_admin_can_set_remote_logo_url_with_safe_audit(branding_app):
     client, Session = branding_app
     headers = _role_header("Volunteer.Admin")
-    remote_url = "https://cdn.example.org/branding/pride-logo.svg?version=2"
+    remote_url = "https://cdn.example.org/branding/event-logo.svg?version=2"
 
     response = client.post(
         "/admin/branding/url",

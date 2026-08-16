@@ -36,7 +36,7 @@
     </div>
     <div class="col-md-6">
       <label class="form-label">Absendername
-        <input class="form-control" name="from_name" value="{{ configuration.from_name if configuration else 'ST. PRIDE Volunteer Management' }}">
+        <input class="form-control" name="from_name" value="{{ configuration.from_name if configuration else request.state.app_name }}">
       </label>
     </div>
     <div class="col-12 d-flex flex-wrap gap-4">

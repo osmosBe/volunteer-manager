@@ -31,8 +31,8 @@ from app.models import (
 from app.services.mail_templates import ensure_mail_templates
 from app.services.volunteers import deterministic_email_hash
 
-DEFAULT_EVENT_NAME = "St. Pölten PRIDE 2026"
-DEFAULT_EVENT_SLUG = "pride-2026"
+DEFAULT_EVENT_NAME = "Demo-Veranstaltung 2026"
+DEFAULT_EVENT_SLUG = "demo-2026"
 
 
 def ensure_default_event(db: Session) -> Event:
@@ -104,11 +104,11 @@ def ensure_demo_data(db: Session) -> Event:
         event = Event(name=DEFAULT_EVENT_NAME, slug=DEFAULT_EVENT_SLUG)
         db.add(event)
 
-    event.short_description = "Gemeinsam machen wir die Demo-PRIDE möglich."
+    event.short_description = "Gemeinsam machen wir die Demo-Veranstaltung möglich."
     event.description = (
-        "Vollständig fiktive Demo-Veranstaltung für den ST. PRIDE Volunteer "
-        "Manager. Alle Personen, Kontakte und Vorgänge dienen ausschließlich "
-        "der Erprobung des Prototyps."
+        "Vollständig fiktive Veranstaltung für den Volunteer Manager. Alle "
+        "Personen, Kontakte und Vorgänge dienen ausschließlich der Erprobung "
+        "des Prototyps."
     )
     event.starts_at = event_start
     event.ends_at = event_end
@@ -116,7 +116,7 @@ def ensure_demo_data(db: Session) -> Event:
     event.end_time_is_set = True
     event.venue = "Demo-Platz St. Pölten"
     event.address = "Demostraße 1, 3100 St. Pölten"
-    event.public_meeting_point = "ST.-PRIDE-Demo-Infostand"
+    event.public_meeting_point = "Demo-Infostand"
     event.registration_opens_at = now - timedelta(hours=1)
     event.registration_closes_at = event_start - timedelta(hours=2)
     event.registration_open_time_is_set = True
@@ -175,7 +175,7 @@ def ensure_demo_data(db: Session) -> Event:
             sort_order=index,
             lead_name=f"Demo-Teamleitung {name}",
             lead_contact=f"demo-{name.lower()}@example.invalid",
-            meeting_point="ST.-PRIDE-Demo-Infostand",
+            meeting_point="Demo-Infostand",
             notes="Ausschließlich fiktiver Arbeitsbereich für die Demo.",
         )
         teams[name] = team
@@ -244,7 +244,7 @@ def ensure_demo_data(db: Session) -> Event:
             prefer_pair="Ordner:in" in role_name or role_name == "Solibandverteilung",
             physically_demanding=team_name in {"Aufbau", "Abbau"},
             sensitive_task=team_name in {"Backstage", "Organisation"},
-            default_meeting_point="ST.-PRIDE-Demo-Infostand",
+            default_meeting_point="Demo-Infostand",
         )
         shift = Shift(
             event=event,
@@ -253,7 +253,7 @@ def ensure_demo_data(db: Session) -> Event:
             description=f"Fiktive Demo-Schicht für {role_name}.",
             starts_at=event_start + timedelta(hours=offset),
             ends_at=event_start + timedelta(hours=offset + duration),
-            location="ST.-PRIDE-Demo-Infostand",
+            location="Demo-Infostand",
             needed_count=capacity,
             waitlist_capacity=waitlist,
             lead_name=f"Demo-Teamleitung {team_name}",
@@ -513,7 +513,7 @@ def ensure_demo_data(db: Session) -> Event:
             port=587,
             username="demo-smtp-user",
             from_email="demo-volunteer@example.invalid",
-            from_name="ST. PRIDE Demo",
+            from_name="Volunteer Manager Demo",
             use_starttls=True,
             use_ssl=False,
             enabled=False,

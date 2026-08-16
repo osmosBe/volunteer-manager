@@ -36,7 +36,7 @@ az deployment group create \
 unset POSTGRES_ADMIN_PASSWORD
 ```
 
-To reuse the current ST. PRIDE resources, add explicit parameters rather than
+To reuse existing Azure resources, add explicit parameters rather than
 guessing or recreating them:
 
 ```bash
@@ -58,12 +58,16 @@ Group. The template does not delete Azure Files, existing OIDC or GitHub state.
 Environment variable set to `false`) so existing environments receive the
 same visible warning without an infrastructure redeployment.
 
+`appName` defaults to `Volunteer Manager`. The DEV workflow also accepts an
+`APP_NAME` GitHub Environment variable and applies it together with the demo
+presentation settings, so forks can brand page titles without rebuilding code.
+
 Mail parameters default to a non-sending open-source installation:
 
 ```text
 mailProvider=console
 mailFromAddress=''
-mailFromName='ST. PRIDE Volunteer Manager'
+mailFromName='Volunteer Manager'
 mailReplyTo=''
 m365TenantId=''
 m365ClientId=''

@@ -1,8 +1,8 @@
-# ST. PRIDE Volunteer Manager
+# Volunteer Manager
 
 An open-source web application for planning events and coordinating volunteers—from public registration to shift assignment, briefing, check-in, materials, and operational communication.
 
-The application was created for [ST. PRIDE](https://stpride.at/) and is designed so other organizations can run it without depending on ST. PRIDE infrastructure or Microsoft Azure. The user interface is currently German; setup and operations documentation is English.
+The application is organization-neutral and can run without Microsoft Azure or any vendor-specific infrastructure. The user interface is currently German; setup and operations documentation is English.
 
 [![CI](https://github.com/osmosBe/volunteer-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/osmosBe/volunteer-manager/actions/workflows/ci.yml)
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FosmosBe%2Fvolunteer-manager%2Fmain%2Finfra%2Fazuredeploy.json)
@@ -27,7 +27,7 @@ The application was created for [ST. PRIDE](https://stpride.at/) and is designed
 
 ## Overview
 
-ST. PRIDE Volunteer Manager provides one operational workspace for an event team and a privacy-conscious self-service flow for volunteers.
+Volunteer Manager provides one operational workspace for an event team and a privacy-conscious self-service flow for volunteers.
 
 Volunteers can discover published events, select non-overlapping shifts, register, verify their email address, edit their registration through a random token, and cancel assignments. Administrators and managers can build event structures, manage capacities and waiting lists, review volunteers, assign shifts, prepare briefings, generate print/CSV views, and operate event-day check-in with QR codes and material hand-out/return tracking.
 
@@ -120,7 +120,7 @@ GitHub dev branch
 | Simple self-hosted     | generic OIDC   | SQLite local volume        | 1                  | small installations         |
 | Production self-hosted | generic OIDC   | PostgreSQL                 | 1 currently        | durable self-hosting        |
 | Kubernetes             | generic OIDC   | PostgreSQL                 | 1 currently        | platform-managed deployment |
-| Azure Container Apps   | Entra EasyAuth | PostgreSQL Flexible Server | existing DEV model | ST. PRIDE/Azure deployments |
+| Azure Container Apps   | Entra EasyAuth | PostgreSQL Flexible Server | existing DEV model | Azure deployments           |
 
 The one-replica limitation for generic OIDC is caused by the current in-process server-side session store, not PostgreSQL. Horizontal scaling needs a shared session backend first.
 
@@ -152,8 +152,14 @@ python -m scripts.seed_default_event
 To mark a local installation visibly as a demo without changing its data:
 
 ```dotenv
+APP_NAME="Volunteer Manager"
 DEMO_MODE=true
 ```
+
+`APP_NAME` controls the neutral product label used in browser titles and the
+administration dashboard. The bundled fallback logo is
+`app/static/images/logo.png`; administrators can still replace it through the
+database-backed Branding page.
 
 Never use the banner as a security boundary. It is presentation-only; authentication, authorization, mail delivery, and data retention continue to follow their normal configuration.
 

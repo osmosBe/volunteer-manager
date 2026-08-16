@@ -3,11 +3,11 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{% block title %}ST. PRIDE Volunteer Manager{% endblock %}</title>
+    <title>{% block title %}{{ app_name | default("Volunteer Manager", true) }}{% endblock %}</title>
   </head>
   <body style="font-family: sans-serif; color: #212529; line-height: 1.5;">
     <main style="max-width: 640px; margin: 0 auto; padding: 24px;">
-      <h1 style="font-size: 22px;">ST. PRIDE Volunteer Manager</h1>
+      <h1 style="font-size: 22px;">{{ app_name | default("Volunteer Manager", true) }}</h1>
       {% block content %}{% endblock %}
     </main>
   </body>

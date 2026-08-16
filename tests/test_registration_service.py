@@ -41,8 +41,8 @@ def db(tmp_path):
 def make_event_and_shifts(db, *, needed_count=2, waitlist_capacity=1):
     start = datetime.now(timezone.utc) + timedelta(days=3)
     event = Event(
-        name="ST. PRIDE Test",
-        slug="stpride-test",
+        name="Volunteer Test",
+        slug="volunteer-test",
         is_public=True,
         status=EventStatus.registration_open,
         registration_opens_at=start - timedelta(days=10),

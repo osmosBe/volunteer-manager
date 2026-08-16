@@ -45,7 +45,7 @@ AuthMode = Annotated[
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
-    app_name: str = "ST. PRIDE Volunteer Management"
+    app_name: str = "Volunteer Manager"
     app_version: str = "0.1.0"
     environment: str = "development"
     database_url: str = Field(default="sqlite:///./volunteer.db")
@@ -74,7 +74,7 @@ class Settings(BaseSettings):
     # and local installations; selecting Graph requires complete credentials.
     mail_provider: Literal["console", "graph"] = "console"
     mail_from_address: str | None = None
-    mail_from_name: str = "ST. PRIDE Volunteer Manager"
+    mail_from_name: str = "Volunteer Manager"
     mail_reply_to: str | None = None
     m365_tenant_id: str | None = None
     m365_client_id: str | None = None

@@ -82,14 +82,15 @@ def admin_mail_test(
 
     timestamp = datetime.now(timezone.utc)
     html_body = email_templates.get_template("test.html").render(
+        app_name=settings.app_name,
         environment=settings.environment,
         timestamp=timestamp.isoformat(),
     )
     message = MailMessage(
         to=[mail_recipient],
-        subject=f"ST. PRIDE Volunteer Manager – Test ({settings.environment})",
+        subject=f"{settings.app_name} – Test ({settings.environment})",
         text_body=(
-            "ST. PRIDE Volunteer Manager\n"
+            f"{settings.app_name}\n"
             f"Environment: {settings.environment}\n"
             f"Timestamp: {timestamp.isoformat()}"
         ),

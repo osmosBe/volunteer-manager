@@ -18,7 +18,7 @@
     </div></fieldset>
     <div class="form-check mb-2"><input class="form-check-input{% if field_errors.get('contact_consent') %} is-invalid{% endif %}" required type="checkbox" id="contact_consent" name="contact_consent" value="true" {% if form_values.get('contact_consent', volunteer.contact_consent) %}checked{% endif %}{% if field_errors.get('contact_consent') %} aria-invalid="true" aria-describedby="contact_consent-error"{% endif %}><label class="form-check-label" for="contact_consent">Ich stimme der Kontaktaufnahme für diese Veranstaltung zu.</label></div>
     {{ field_error("contact_consent", field_errors) }}
-    <div class="form-check mb-4"><input class="form-check-input" type="checkbox" id="future_contact_consent" name="future_contact_consent" value="true" {% if form_values.get('future_contact_consent', volunteer.future_contact_consent) %}checked{% endif %}><label class="form-check-label" for="future_contact_consent">ST. PRIDE darf mich künftig über weitere Ehrenamtsmöglichkeiten informieren.</label></div>
+    <div class="form-check mb-4"><input class="form-check-input" type="checkbox" id="future_contact_consent" name="future_contact_consent" value="true" {% if form_values.get('future_contact_consent', volunteer.future_contact_consent) %}checked{% endif %}><label class="form-check-label" for="future_contact_consent">Die veranstaltende Organisation darf mich künftig über weitere Ehrenamtsmöglichkeiten informieren.</label></div>
     <button class="btn btn-primary btn-lg" type="submit">Änderungen speichern</button>
     <a class="btn btn-outline-secondary btn-lg" href="/anmeldung/{{ token }}/bestaetigung">Abbrechen</a>
   </form>

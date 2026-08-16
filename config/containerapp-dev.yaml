@@ -1,6 +1,6 @@
 # Declarative target state for the existing DEV Container App. Values in angle
 # brackets are intentionally deployment-specific; no credentials belong here.
-name: ca-stpride-volunteer-dev
+name: <CONTAINER_APP_NAME>
 type: Microsoft.App/containerApps
 properties:
   managedEnvironmentId: <MANAGED_ENVIRONMENT_RESOURCE_ID>
@@ -13,8 +13,10 @@ properties:
   template:
     containers:
       - name: volunteer-manager
-        image: <ACR_LOGIN_SERVER>/stpride-volunteer-management:<COMMIT_SHA>
+        image: <ACR_LOGIN_SERVER>/volunteer-manager:<COMMIT_SHA>
         env:
+          - name: APP_NAME
+            value: Volunteer Manager
           - name: DATABASE_URL
             secretRef: database-url
           - name: MAIL_PROVIDER
@@ -22,7 +24,7 @@ properties:
           - name: MAIL_FROM_ADDRESS
             value: <SHARED_MAILBOX_ADDRESS_OR_EMPTY>
           - name: MAIL_FROM_NAME
-            value: <SENDER_DISPLAY_NAME>
+            value: <SENDER_DISPLAY_NAME_OR_VOLUNTEER_MANAGER>
           - name: MAIL_REPLY_TO
             value: <REPLY_TO_ADDRESS_OR_EMPTY>
           - name: M365_TENANT_ID

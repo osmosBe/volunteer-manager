@@ -5,7 +5,7 @@ def get_local_user() -> AuthenticatedUser:
     return AuthenticatedUser(
         user_id="local-dev",
         name="Local Developer",
-        email="local-dev@stpride.local",
+        email="local-dev@example.invalid",
         groups=[],
         claims=[],
     )
