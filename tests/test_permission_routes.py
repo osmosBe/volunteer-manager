@@ -187,6 +187,7 @@ def test_route_permission_matrix(permission_app):
         "/admin/check-in",
         "/admin/einstellungen/smtp",
         "/admin/branding",
+        "/admin/einstellungen/rechtliches",
         "/admin/permissions",
         "/admin/db",
         "/admin/mail",
@@ -202,18 +203,21 @@ def test_route_permission_matrix(permission_app):
     assert 'href="/admin/permissions"' in admin_dashboard.text
     assert 'href="/admin/db"' in admin_dashboard.text
     assert 'href="/admin/branding"' in admin_dashboard.text
+    assert 'href="/admin/einstellungen/rechtliches"' in admin_dashboard.text
 
     manager_dashboard = client.get("/admin", headers=manager)
     assert manager_dashboard.status_code == 200
     assert "/admin/permissions" not in manager_dashboard.text
     assert "/admin/einstellungen/smtp" not in manager_dashboard.text
     assert "/admin/branding" not in manager_dashboard.text
+    assert "/admin/einstellungen/rechtliches" not in manager_dashboard.text
     assert "/admin/db" not in manager_dashboard.text
     assert client.get("/admin/check-in", headers=manager).status_code == 200
     assert client.get("/admin/mail", headers=manager).status_code == 200
     for path in (
         "/admin/einstellungen/smtp",
         "/admin/branding",
+        "/admin/einstellungen/rechtliches",
         "/admin/permissions",
         "/admin/db",
     ):

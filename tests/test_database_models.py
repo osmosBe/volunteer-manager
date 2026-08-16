@@ -32,6 +32,7 @@ from app.models import (
     CheckInMaterial,
     Event,
     EventStatus,
+    LegalSettings,
     MailTemplate,
     OutboxMessage,
     ShiftAssignment,
@@ -130,7 +131,7 @@ def test_database_diagnostics_handles_uninitialized_schema(tmp_path):
         "database_reachable": True,
         "schema_initialized": False,
         "current_revision": None,
-        "expected_revision": "20260816_0014",
+        "expected_revision": "20260816_0015",
         "migration_pending": True,
         "tables": {"events": False, "volunteers": False, "shifts": False},
         "diagnostic_error": None,
@@ -198,6 +199,7 @@ def test_initial_migration_creates_tables(tmp_path):
         "permissions",
         "permission_mappings",
         "branding_settings",
+        "legal_settings",
         "alembic_version",
     }.issubset(table_names)
     Session = sessionmaker(bind=engine)
@@ -206,6 +208,10 @@ def test_initial_migration_creates_tables(tmp_path):
         assert branding is not None
         assert branding.logo_url is None
         assert branding.logo_data is None
+        legal = db.get(LegalSettings, 1)
+        assert legal is not None
+        assert legal.privacy_url is None
+        assert legal.imprint_url is None
 
 
 def test_neutral_branding_migration_updates_existing_defaults(tmp_path):

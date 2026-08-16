@@ -638,6 +638,16 @@ class BrandingSettings(TimestampMixin, Base):
     logo_filename: Mapped[str | None] = mapped_column(String(255))
 
 
+class LegalSettings(TimestampMixin, Base):
+    """Singleton legal-footer configuration stored in the application database."""
+
+    __tablename__ = "legal_settings"
+    __table_args__ = (CheckConstraint("id = 1", name="ck_legal_settings_singleton"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    privacy_url: Mapped[str | None] = mapped_column(String(2048))
+    imprint_url: Mapped[str | None] = mapped_column(String(2048))
+
+
 class Permission(TimestampMixin, Base):
     __tablename__ = "permissions"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
