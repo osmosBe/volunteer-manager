@@ -1,87 +1,237 @@
 # ST. PRIDE Volunteer Manager
 
-Open-source volunteer planning, registration, briefing, check-in, material and
-communication management built with FastAPI. The user interface is currently
-German; deployment and operations documentation is English for reuse by other
-organizations.
+An open-source web application for planning events and coordinating volunteers—from public registration to shift assignment, briefing, check-in, materials, and operational communication.
 
+The application was created for [ST. PRIDE](https://stpride.at/) and is designed so other organizations can run it without depending on ST. PRIDE infrastructure or Microsoft Azure. The user interface is currently German; setup and operations documentation is English.
+
+[![CI](https://github.com/osmosBe/volunteer-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/osmosBe/volunteer-manager/actions/workflows/ci.yml)
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FosmosBe%2Fvolunteer-manager%2Fmain%2Finfra%2Fazuredeploy.json)
 
-The button provisions Azure resources from the compiled `infra/azuredeploy.json`
-template. `infra/main.bicep` and its modules are the source of truth. Azure
-provisioning cannot configure a GitHub repository or Entra EasyAuth by itself;
-run `scripts/bootstrap.ps1` afterwards.
+## Contents
 
-## What the application covers
+- [Overview](#overview)
+- [Features](#features)
+- [Architecture](#architecture)
+- [Choose a deployment](#choose-a-deployment)
+- [Quick start: local development](#quick-start-local-development)
+- [Docker Compose with SQLite](#docker-compose-with-sqlite)
+- [Docker Compose with PostgreSQL](#docker-compose-with-postgresql)
+- [Authentication](#authentication)
+- [Permission management](#permission-management)
+- [Transactional mail and Microsoft 365](#transactional-mail-and-microsoft-365)
+- [Azure Container Apps](#azure-container-apps)
+- [Database migrations and backups](#database-migrations-and-backups)
+- [Diagnostics and troubleshooting](#diagnostics-and-troubleshooting)
+- [Development and CI](#development-and-ci)
+- [Security notes](#security-notes)
 
-- Public event pages and multi-shift registration with capacity, waiting lists,
-  overlap and age checks
-- Double opt-in email verification and token-protected registration editing
-- Event, team, role, shift, volunteer, briefing and material administration
-- Bulk status/briefing actions, controlled rejection and waiting-list promotion
-- Mobile and QR check-in, material issue/return tracking and print views
-- Search, filters, CSV exports, audit records, mail templates, SMTP and outbox
-- Database-backed application branding with a default, remote or uploaded logo
-- Microsoft Entra EasyAuth integration without a second application login system
-- Health, readiness and safe database/migration diagnostics
+## Overview
 
-Demo data is explicitly fictional and uses only `example.invalid` addresses.
-It is never enabled by default outside the development deployment.
+ST. PRIDE Volunteer Manager provides one operational workspace for an event team and a privacy-conscious self-service flow for volunteers.
+
+Volunteers can discover published events, select non-overlapping shifts, register, verify their email address, edit their registration through a random token, and cancel assignments. Administrators and managers can build event structures, manage capacities and waiting lists, review volunteers, assign shifts, prepare briefings, generate print/CSV views, and operate event-day check-in with QR codes and material hand-out/return tracking.
+
+The application deliberately separates four concerns:
+
+```text
+Identity provider             Application                    Data and delivery
+-----------------             -----------                    -----------------
+EasyAuth or generic OIDC ---> AuthenticatedUser ----┐
+                                                    ├─> permission engine -> routes/services
+roles, groups, email -------> database mappings ----┘
+
+business workflow ----------> MailService -----------> console or Microsoft Graph
+SQLAlchemy/Alembic ----------> DATABASE_URL ----------> SQLite or PostgreSQL
+```
+
+That separation keeps the same application image usable in Azure Container Apps, Docker Compose, and Kubernetes. Azure EasyAuth, Microsoft Graph, PostgreSQL, and SQLite are provider choices rather than business-code dependencies.
+
+### Current boundaries
+
+- The UI is German; this README and operational documentation are English.
+- SQLite is supported only for one application replica on a local disk.
+- Generic OIDC login sessions are server-side but currently process-local; use one application replica until a shared session store is implemented.
+- The `police` permission exists as a reserved placeholder and currently grants no routes.
+- The provider-neutral Graph mail foundation and the existing SMTP/outbox workflow coexist. Existing workflows have not all been migrated to `MailService` yet.
+- No local username/password database, bundled identity provider, Redis, Celery, or newsletter system is included.
+
+## Features
+
+### Volunteer experience
+
+- Public event pages and multi-shift registration
+- Capacity, waiting-list, age, and overlapping-shift validation
+- Double opt-in email verification
+- Token-protected registration editing and assignment cancellation
+- Registration and assignment confirmation pages with QR codes
+
+### Event operations
+
+- Events, teams/areas, roles/tasks, shifts, and capacities
+- Volunteer approval, rejection, assignment, and bulk actions
+- Waiting-list promotion and briefing status
+- Mobile event check-in, QR scan, check-out, and material tracking
+- Print views for shift plans, check-in lists, and QR cards
+- CSV exports for contacts and shifts
+
+### Administration and platform
+
+- Database-backed role, group, and email permission mappings
+- Audited permission and configuration changes
+- Configurable database-backed logo/branding
+- Mail templates, legacy SMTP/outbox administration, and provider-neutral test mail
+- Safe liveness, readiness, database, authentication, and mail diagnostics
+- PostgreSQL and SQLite schema management through the same Alembic history
+
+Demo data is fictional, uses only `example.invalid` addresses, and is never enabled by default outside the development deployment.
 
 ## Architecture
 
+### Application stack
+
+- FastAPI and Uvicorn
+- SQLAlchemy 2 and Alembic
+- PostgreSQL via psycopg 3 or SQLite
+- Jinja2 server-rendered UI
+- Authlib for generic OpenID Connect
+- MSAL plus Microsoft Graph REST for app-only mail delivery
+- Docker/OCI image based on Python 3.13
+
+### Azure delivery path
+
 ```text
-GitHub (dev/main)
+GitHub dev branch
   -> GitHub Actions CI
-  -> GitHub Actions OIDC (no Azure client secret)
+  -> GitHub Actions OIDC (no Azure deployment client secret)
   -> Azure Container Registry
   -> Azure Container Apps revision
-  -> Azure Container Apps migration job (same image, alembic upgrade head)
-  -> Azure Database for PostgreSQL Flexible Server (TLS required)
+  -> Container Apps migration job: alembic upgrade head
+  -> PostgreSQL Flexible Server
+  -> exact commit SHA, liveness, and readiness verification
 ```
 
-Production and shared Azure deployments use PostgreSQL. SQLite remains supported
-for lightweight local development and unit tests:
+`DATABASE_URL` is the only database selector. Importing the application does not connect to a database, create tables, seed data, or run migrations. The web container starts Uvicorn only; migrations are an explicit deployment step.
 
-```text
-sqlite:///./volunteer.db
-postgresql+psycopg://USER:PASSWORD@HOST:5432/volunteer?sslmode=require
+## Choose a deployment
+
+| Scenario               | Authentication | Database                   | Replicas           | Recommended for             |
+| ---------------------- | -------------- | -------------------------- | ------------------ | --------------------------- |
+| Local development      | `disabled`     | SQLite                     | 1                  | isolated development and CI |
+| Simple self-hosted     | generic OIDC   | SQLite local volume        | 1                  | small installations         |
+| Production self-hosted | generic OIDC   | PostgreSQL                 | 1 currently        | durable self-hosting        |
+| Kubernetes             | generic OIDC   | PostgreSQL                 | 1 currently        | platform-managed deployment |
+| Azure Container Apps   | Entra EasyAuth | PostgreSQL Flexible Server | existing DEV model | ST. PRIDE/Azure deployments |
+
+The one-replica limitation for generic OIDC is caused by the current in-process server-side session store, not PostgreSQL. Horizontal scaling needs a shared session backend first.
+
+## Quick start: local development
+
+Requirements: Python 3.13 and a shell. Docker is optional.
+
+```bash
+git clone https://github.com/osmosBe/volunteer-manager.git
+cd volunteer-manager
+python3.13 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements-dev.txt
+cp .env.example .env
+alembic upgrade head
+uvicorn app.main:app --reload
 ```
 
-`DATABASE_URL` is the only application database selector. PostgreSQL uses
-psycopg 3. SQLite PRAGMAs are applied only to SQLite connections. Importing the
-application does not connect to a database, create schema objects or run
-migrations.
+Open <http://localhost:8000>. The example uses `AUTH_MODE=disabled`, which creates the local development identity and grants it all permissions.
 
-## Portable deployment and authentication
+> **Never expose `AUTH_MODE=disabled` to an untrusted network.** Outside development/test the application refuses to start unless `ALLOW_INSECURE_AUTH=true` is explicitly set.
 
-The same image supports Azure Container Apps, Docker Compose and Kubernetes.
-Azure is a configuration target, not an application dependency.
+Optional fictional demo data:
 
-| Scenario | Authentication | Database |
-| --- | --- | --- |
-| Simple self-hosted | Generic OIDC | SQLite, one application replica |
-| Production self-hosted / Kubernetes | Generic OIDC | PostgreSQL |
-| Azure Container Apps | Entra EasyAuth | PostgreSQL Flexible Server |
+```bash
+python -m scripts.seed_default_event
+```
 
-`AUTH_MODE=easyauth` preserves the existing Azure EasyAuth adapter and requires
-no generic OIDC credentials. `AUTH_MODE=oidc` uses standards-based OpenID Connect
-Authorization Code Flow. `AUTH_MODE=disabled` is for local development and CI
-only; never expose it to an untrusted network. Outside development/test it
-requires the explicit `ALLOW_INSECURE_AUTH=true` opt-in.
+Useful checks:
 
-All adapters produce the same `AuthenticatedUser` model. The database-backed
-permission engine consumes only roles, groups and email, so `Volunteer.Admin`
-has the same meaning with EasyAuth, Authentik, Keycloak, Zitadel, direct Entra
-OIDC, or another conforming provider.
+```bash
+curl --fail http://localhost:8000/healthz
+curl --fail http://localhost:8000/health/live
+curl --fail http://localhost:8000/health/ready
+```
+
+## Docker Compose with SQLite
+
+This is the smallest self-hosted installation. It stores `/data/volunteer.db` in the named volume `volunteer-data` and does not need PostgreSQL or Azure.
+
+```bash
+cp .env.example .env
+# Configure AUTH_MODE=oidc, APP_BASE_URL, SESSION_SECRET, and OIDC_* in .env.
+
+docker compose -f deploy/docker-compose.sqlite.yml build
+docker compose -f deploy/docker-compose.sqlite.yml run --rm volunteer-manager alembic upgrade head
+docker compose -f deploy/docker-compose.sqlite.yml up -d
+docker compose -f deploy/docker-compose.sqlite.yml ps
+```
+
+Operational rules:
+
+- Run exactly one application replica.
+- Keep the database on a local Docker volume or bind mount.
+- Do not use SMB, NFS, Azure Files, or another network filesystem.
+- Run migrations explicitly before starting an upgraded image.
+- Back up with SQLite's online backup mechanism or while the container is stopped.
+
+The port is configurable with `APP_PORT` and defaults to `8000`.
+
+## Docker Compose with PostgreSQL
+
+The PostgreSQL edition starts the application and PostgreSQL 17 with separate persistent storage. Protect `.env`; it contains deployment secrets and is gitignored.
+
+```dotenv
+POSTGRES_DB=volunteer
+POSTGRES_USER=volunteer
+POSTGRES_PASSWORD=<strong-raw-password>
+DATABASE_URL=postgresql+psycopg://volunteer:<url-encoded-password>@postgres:5432/volunteer
+
+AUTH_MODE=oidc
+APP_BASE_URL=https://volunteer.example.org
+SESSION_SECRET=<long-random-value>
+OIDC_ISSUER_URL=https://auth.example.org/application/o/volunteer/
+OIDC_CLIENT_ID=<client-id>
+OIDC_CLIENT_SECRET=<client-secret>
+```
+
+Use the raw password for `POSTGRES_PASSWORD` and its URL-encoded form inside `DATABASE_URL`.
+
+```bash
+docker compose -f deploy/docker-compose.postgres.yml build
+docker compose -f deploy/docker-compose.postgres.yml up -d postgres
+docker compose -f deploy/docker-compose.postgres.yml run --rm volunteer-manager alembic upgrade head
+docker compose -f deploy/docker-compose.postgres.yml up -d
+docker compose -f deploy/docker-compose.postgres.yml ps
+```
+
+The application waits for PostgreSQL health before starting, but it deliberately does not run schema migrations automatically.
+
+## Authentication
+
+Select one provider centrally with `AUTH_MODE`:
+
+| Mode       | Purpose                            | Configuration                            |
+| ---------- | ---------------------------------- | ---------------------------------------- |
+| `disabled` | isolated local development/CI only | no external identity provider            |
+| `easyauth` | Azure Container Apps EasyAuth      | trusted `X-MS-CLIENT-PRINCIPAL` headers  |
+| `oidc`     | generic OpenID Connect             | discovery, Authorization Code Flow, PKCE |
+
+Every provider produces the same internal `AuthenticatedUser` with `user_id`, `name`, `email`, `roles`, `groups`, and `claims`. Routes and permission checks do not contain provider-specific role logic.
 
 ### Generic OIDC
 
-OIDC discovery uses `{OIDC_ISSUER_URL}/.well-known/openid-configuration`.
-Authorization Code Flow includes state, nonce and PKCE validation. Tokens exist
-only during the callback and are never passed to templates, diagnostics or logs;
-the signed HttpOnly, `SameSite=Lax` cookie retains only an opaque local session
-identifier. With an HTTPS `APP_BASE_URL`, the cookie is also marked `Secure`.
+The implementation uses standards-based discovery at `{OIDC_ISSUER_URL}/.well-known/openid-configuration`, Authorization Code Flow, state and nonce validation, and PKCE. The callback URI is derived from `APP_BASE_URL`:
+
+```text
+<APP_BASE_URL>/auth/callback
+```
+
+Example:
 
 ```dotenv
 AUTH_MODE=oidc
@@ -93,129 +243,184 @@ OIDC_CLIENT_SECRET=<client-secret>
 OIDC_SCOPES="openid profile email"
 OIDC_ROLE_CLAIMS="roles,realm_access.roles"
 OIDC_GROUP_CLAIMS="groups"
+OIDC_USER_ID_CLAIM="sub"
+OIDC_NAME_CLAIM="name"
+OIDC_EMAIL_CLAIMS="email,preferred_username"
 ```
 
-Set the provider redirect URI to `<APP_BASE_URL>/auth/callback`. Identity claims
-default to `sub`, `name`, and `email,preferred_username`; dotted paths such as
-`realm_access.roles` support common nested claims without provider-specific code.
+Dotted paths such as `realm_access.roles` support Keycloak-style nested claims. The same generic adapter can be configured for Authentik, Keycloak, Zitadel, or direct Entra OIDC when the provider supports standard discovery.
 
-OIDC login transactions and authenticated sessions are server-side and
-process-local; the cookie contains only an opaque identifier. Run one application
-replica per OIDC deployment for now. Horizontal scaling requires a shared
-server-side session store and is a deliberate follow-up milestone; PostgreSQL
-data portability alone does not make login sessions multi-replica safe.
+Tokens exist only during callback processing and are never exposed to templates, diagnostics, or logs. The browser receives an opaque signed, `HttpOnly`, `SameSite=Lax` session cookie; HTTPS also enables `Secure`.
 
-### Docker Compose: SQLite
+### Azure EasyAuth
 
-Copy `.env.example` to a protected `.env`, configure OIDC, then run:
+Set `AUTH_MODE=easyauth`. Generic `OIDC_*` credentials are neither read nor required. Configure Entra authentication on the Container App and expose the appropriate App Roles/groups through EasyAuth. Existing login/logout routes remain `/auth/login` and `/auth/logout`.
 
-```bash
-docker compose -f deploy/docker-compose.sqlite.yml run --rm volunteer-manager alembic upgrade head
-docker compose -f deploy/docker-compose.sqlite.yml up -d --build
+## Permission management
+
+The application database is the single source of truth for authorization. No YAML file is loaded or written at runtime.
+
+Alembic creates the four system permissions and their initial App Role mappings idempotently:
+
+| Permission | Initial role        | Effective access                                                                                  |
+| ---------- | ------------------- | ------------------------------------------------------------------------------------------------- |
+| `admin`    | `Volunteer.Admin`   | all application and technical administration                                                      |
+| `manager`  | `Volunteer.Manager` | operational access except DB diagnostics, SMTP, permission management, and admin mail diagnostics |
+| `checkin`  | `Volunteer.CheckIn` | event check-in, QR scan, check-in/check-out                                                       |
+| `police`   | `Volunteer.Police`  | reserved; no current routes                                                                       |
+
+Administrators manage mappings at `/admin/permissions`. A permission may match any of:
+
+- an exact App Role;
+- an exact group object ID (UUID); or
+- a normalized email address as an emergency/fallback mapping.
+
+App Roles are preferred. Group IDs are authoritative; optional labels are display-only. Authorization fails closed for database errors, missing permissions, and permissions without mappings. The last `admin` mapping cannot be removed. All mapping and metadata changes are audited.
+
+## Transactional mail and Microsoft 365
+
+New installations default to `MAIL_PROVIDER=console`. The console provider never sends a message and logs only safe metadata—never bodies, tokens, secrets, or attachment contents.
+
+```text
+business workflow -> MailService -> MailProvider
+                                  -> ConsoleMailProvider
+                                  -> MicrosoftGraphMailProvider
+                                     -> GraphTokenProvider
 ```
 
-SQLite persists at `/data/volunteer.db` in a named Docker volume. It supports one
-application replica only. Do not use SMB, NFS, Azure Files or any network
-filesystem, and do not horizontally scale this edition.
+The Graph provider uses app-only authentication and always sends through:
 
-### Docker Compose: PostgreSQL
-
-Set a strong raw `POSTGRES_PASSWORD`, an URL-encoded `DATABASE_URL` using the
-Compose hostname `postgres`, and OIDC configuration in `.env`:
-
-```dotenv
-POSTGRES_PASSWORD=<strong-raw-password>
-DATABASE_URL=postgresql+psycopg://volunteer:<url-encoded-password>@postgres:5432/volunteer
+```text
+POST /users/{MAIL_FROM_ADDRESS}/sendMail
 ```
 
-```bash
-docker compose -f deploy/docker-compose.postgres.yml run --rm volunteer-manager alembic upgrade head
-docker compose -f deploy/docker-compose.postgres.yml up -d --build
-```
+It never uses `/me/sendMail`. The API request supports To/CC/BCC, HTML or text bodies, Reply-To, small file attachments, and Sent Items. The application requests only the Graph `Mail.Send` capability and does not read mailboxes.
 
-Migrations are always explicit; the web container never runs them at startup.
-`.env` is gitignored and must be protected as a production secret.
+### Quick step: configure Exchange Online Application RBAC
 
-### Backups
+`Mail.Send` application access is powerful. An unscoped Entra grant permits sending as mailboxes across the tenant. The preferred modern design is a resource-scoped **Exchange Online Application RBAC** assignment. Microsoft documents that Entra app grants and Exchange RBAC grants are additive; remove an unscoped Entra `Mail.Send` grant when the scoped Exchange assignment is the intended authorization source.
 
-For SQLite use SQLite's online backup API (for example `sqlite3
-/data/volunteer.db '.backup /backup/volunteer.db'`) or stop the container before
-copying it—never blindly copy an actively written database. For PostgreSQL use a
-consistent `pg_dump`, e.g. `pg_dump -Fc -h <host> -U <user> volunteer > volunteer.dump`.
-Test restores, not just backups.
+Prerequisites:
 
-## Local development
+- a shared mailbox;
+- a dedicated Entra application and Enterprise Application/service principal;
+- Exchange Online PowerShell;
+- the application/client ID and the **service-principal Object ID** from Enterprise Applications (not the App Registration object ID).
 
-Requirements: Python 3.13 (the code remains compatible with the current local
-test environment), and optionally Docker Compose.
-
-```bash
-python3.13 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements-dev.txt
-cp .env.example .env
-alembic upgrade head
-uvicorn app.main:app --reload
-```
-
-To add fictional local data after migrating:
-
-```bash
-python -m scripts.seed_default_event
-```
-
-With Docker Compose, run the documented one-shot `alembic upgrade head` command
-before starting or upgrading the web service. The web container itself only runs
-Uvicorn. It never migrates or seeds a database on startup.
-
-## Azure quick start for a new fork
-
-### 1. Fork or clone
-
-Fork this repository, or clone it and push it to a GitHub repository you control.
-Keep the long-term branch model to `dev` and `main`; no permanent test branch is
-required.
-
-### 2. Provision Azure
-
-Use the **Deploy to Azure** button above. Choose an existing or new Resource
-Group and provide a strong PostgreSQL administrator password when prompted.
-
-The template creates, or can safely reuse by explicit name:
-
-- Azure Container Registry (Basic)
-- Log Analytics workspace
-- Container Apps environment
-- Container App bootstrap resource
-- manual Container Apps Alembic migration job
-- PostgreSQL Flexible Server 16, database `volunteer`, Burstable `Standard_B1ms`,
-  32 GiB storage, seven-day backup, no HA or geo redundancy
-- optional storage account for future files/exports (never for the database)
-
-The PostgreSQL password is passed as a secure deployment parameter and stored in
-Container App/Job secrets. It is not an output and is never committed.
-
-For CLI deployment and existing-resource parameters, see [infra/README.md](infra/README.md).
-
-### 3. Bootstrap GitHub and OIDC
-
-Install and authenticate Azure CLI (`az`) and GitHub CLI (`gh`). **Provision the
-Azure template from step 2 before running bootstrap.** Bootstrap deliberately
-does not create PostgreSQL, a Container Apps migration Job, or an ACR image from
-guessed values. This keeps an existing deployment safe.
-
-For a first setup, the recommended flow is interactive. It makes every selected
-Azure resource visible and works equally well for a new fork and an existing
-deployment:
+Choose an organization-specific custom-attribute marker and verify it is not used by another mailbox:
 
 ```powershell
+Connect-ExchangeOnline
+
+$SharedMailbox = "shared-mailbox@example.org"
+$ApplicationId = "<ENTRA-APPLICATION-CLIENT-ID>"
+$ServicePrincipalObjectId = "<ENTERPRISE-APP-SERVICE-PRINCIPAL-OBJECT-ID>"
+$ScopeName = "Volunteer Manager sender"
+$ScopeMarker = "VolunteerManagerMailSender"
+
+Set-Mailbox -Identity $SharedMailbox -CustomAttribute15 $ScopeMarker
+
+New-ManagementScope `
+  -Name $ScopeName `
+  -RecipientRestrictionFilter "CustomAttribute15 -eq '$ScopeMarker'"
+
+New-ServicePrincipal `
+  -AppId $ApplicationId `
+  -ObjectId $ServicePrincipalObjectId `
+  -DisplayName "Volunteer Manager mail"
+
+New-ManagementRoleAssignment `
+  -Name "Volunteer Manager scoped Mail.Send" `
+  -App $ServicePrincipalObjectId `
+  -Role "Application Mail.Send" `
+  -CustomResourceScope $ScopeName
+
+Test-ServicePrincipalAuthorization `
+  -Identity $ApplicationId `
+  -Resource $SharedMailbox | Format-Table
+
+Test-ServicePrincipalAuthorization `
+  -Identity $ApplicationId `
+  -Resource "known-unauthorized-mailbox@example.org" | Format-Table
+```
+
+The intended mailbox must report `InScope=True`; the negative test must report `InScope=False`. `Test-ServicePrincipalAuthorization` evaluates Exchange RBAC only and does not include separate Entra grants. Permission caches can take 30 minutes to two hours, so finish with a real negative Graph test after propagation.
+
+References: [RBAC for Applications in Exchange Online](https://learn.microsoft.com/en-us/exchange/permissions-exo/application-rbac) and [Microsoft Graph `user: sendMail`](https://learn.microsoft.com/en-us/graph/api/user-sendmail?view=graph-rest-1.0).
+
+### Quick step: configure the runtime
+
+Non-secret values:
+
+```dotenv
+MAIL_PROVIDER=graph
+MAIL_FROM_ADDRESS=shared-mailbox@example.org
+MAIL_FROM_NAME="Volunteer Team"
+MAIL_REPLY_TO=volunteers@example.org
+M365_TENANT_ID=<tenant-id>
+M365_CLIENT_ID=<application-client-id>
+M365_AUTH_MODE=client_secret
+```
+
+Secret:
+
+```text
+M365_CLIENT_SECRET=<client-secret>
+```
+
+In Azure, store it as the Container App secret `m365-client-secret` and expose it only through `M365_CLIENT_SECRET=secretref:m365-client-secret`. Never commit it or put it in a diagnostic endpoint.
+
+Then:
+
+1. Open `/admin/mail` as an administrator.
+2. Confirm provider, sender, auth mode, and configured state.
+3. Send a test to an explicitly supplied address.
+4. Verify the shared mailbox Sent Items.
+5. Verify the unauthorized-mailbox Graph test returns `403` after permission propagation.
+
+Graph `202 Accepted` means Exchange accepted the request; it does not prove final delivery. Client secrets need an owner, expiry alert, and overlap-based rotation. `managed_identity` is reserved behind the token-provider abstraction but intentionally fails closed today.
+
+## Azure Container Apps
+
+### Quick step: provision a new environment
+
+The Deploy to Azure button provisions the compiled `infra/azuredeploy.json`. `infra/main.bicep` and its modules are the source of truth. The template creates or explicitly reuses:
+
+- Azure Container Registry;
+- Log Analytics and Container Apps environment;
+- bootstrap Container App and manual migration job;
+- PostgreSQL Flexible Server and database;
+- optional storage for future files/exports (never for SQLite/PostgreSQL database files).
+
+For CLI use, review the change first and provide a strong PostgreSQL password through a secure parameter path:
+
+```bash
+az deployment group what-if \
+  --resource-group <RESOURCE-GROUP> \
+  --template-file infra/main.bicep \
+  --parameters infra/parameters/dev.bicepparam
+
+az deployment group create \
+  --resource-group <RESOURCE-GROUP> \
+  --template-file infra/main.bicep \
+  --parameters infra/parameters/dev.bicepparam \
+  postgresqlAdministratorPassword='<STRONG-PASSWORD>'
+```
+
+See [infra/README.md](infra/README.md) for existing-resource parameters and networking boundaries.
+
+### Quick step: run `bootstrap.ps1`
+
+Provision Azure first. Then authenticate Azure CLI and GitHub CLI and run the idempotent bootstrap:
+
+```powershell
+az login
+gh auth login
+
 pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\bootstrap.ps1
 ```
 
-Supply the GitHub owner/repository, Azure subscription ID, DEV Resource Group
-and tenant ID when prompted. The remaining Azure resource names are detected
-when they are unambiguous. A fully parameterized invocation is also supported
-for repeatable administration:
+For repeatable administration:
 
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\bootstrap.ps1 `
@@ -227,70 +432,9 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\bootstrap.ps1 `
   -EnvironmentName "development"
 ```
 
-#### Bootstrap prompt guide
+Bootstrap discovers unambiguous resource names, preserves matching GitHub OIDC and Container App secrets, and configures GitHub Environment variables. If a required resource or value is ambiguous, it stops instead of guessing.
 
-1. **Azure Container Apps migration job name**: after the Bicep deployment,
-   bootstrap normally discovers the one migration Job automatically, so this
-   prompt is not shown. If it is shown, enter the name returned by the following
-   command. With the template defaults, it is `volunteer-dev-migrate`:
-
-   ```powershell
-   az containerapp job list --resource-group "<DEV-RESOURCE-GROUP>" --query "[].name" --output tsv
-   ```
-
-   If no Job is returned, stop with `Ctrl+C` and complete the Azure template
-   deployment first. Do not enter a legacy placeholder such as
-   `migrate-container-app`.
-
-2. **PostgreSQL `DATABASE_URL`**: this is requested only when the existing
-   Container App or migration Job lacks its `database-url` secret reference.
-   Azure cannot read a secret value back from one resource to copy it to the
-   other, so bootstrap asks once for the same value that was used to provision
-   PostgreSQL. Its required form is:
-
-   ```text
-   postgresql+psycopg://<ADMIN-LOGIN>:<URL-ENCODED-PASSWORD>@<SERVER-FQDN>:5432/volunteer?sslmode=require
-   ```
-
-   Find the server host with:
-
-   ```powershell
-   az postgres flexible-server list --resource-group "<DEV-RESOURCE-GROUP>" --query "[].{Name:name,Host:fullyQualifiedDomainName}" --output table
-   ```
-
-   Use the administrator password chosen during template deployment. It cannot
-   be recovered from Azure. URL-encode passwords containing special characters;
-   do not paste the password into GitHub, source files or shell history.
-   A blank URL is rejected before bootstrap changes an Azure secret.
-
-3. **Azure application (Client) ID**: if `AZURE_CLIENT_ID` already exists only
-   as a GitHub *Secret*, GitHub does not permit bootstrap to read it. Enter the
-   client ID of the **GitHub Actions OIDC application**, not the application ID
-   used by Container Apps EasyAuth. Find candidates and verify the federated
-   credential subject:
-
-   ```powershell
-   az ad app list --all --query "[?contains(displayName, 'volunteer')].{Name:displayName,ClientId:appId}" --output table
-   az ad app federated-credential list --id "<CLIENT-ID>" --query "[].{Name:name,Subject:subject,Issuer:issuer}" --output table
-   ```
-
-   The correct credential has the subject
-   `repo:<owner>/<repository>:environment:development`. A blank client ID
-   aborts before bootstrap writes GitHub Environment Variables; the existing
-   GitHub Secret is never overwritten.
-
-The script is idempotent. It discovers unambiguous Azure resources, preserves a
-matching OIDC application/federated credential, creates only missing GitHub
-configuration and updates values rather than replacing environments. If an
-existing client ID is stored only as a write-only GitHub secret, the script asks
-for that non-secret ID and leaves the secret untouched.
-
-If `DATABASE_URL` secret references already exist, they are reused. If they are
-missing, the script asks for the PostgreSQL URL with hidden input and adds only
-the named secret/reference; it does not replace other Container App settings.
-
-If no OIDC application exists, the script can create one without a client
-secret. The preferred federated identity is:
+The GitHub Actions federated credential must use:
 
 ```text
 issuer:   https://token.actions.githubusercontent.com
@@ -298,387 +442,109 @@ subject:  repo:<owner>/<repository>:environment:development
 audience: api://AzureADTokenExchange
 ```
 
-Contributor at Resource Group scope is sufficient for deployments but may not
-be sufficient to create role assignments. If RBAC assignment fails, bootstrap
-prints the exact Resource Group-scoped `az role assignment create` command for a
-permitted administrator and exits without attempting privilege escalation.
+Contributor on the selected Resource Group is sufficient for deployment but usually cannot create role assignments. If that operation fails, bootstrap prints the exact Resource Group-scoped command for an authorized administrator and does not escalate itself.
 
-### 4. Configure Entra EasyAuth
+### DEV deployment behavior
 
-Configure Microsoft Entra authentication on the Container App and assign the
-appropriate App Roles (initially `Volunteer.Admin`, `Volunteer.Manager`,
-`Volunteer.CheckIn`, or the reserved `Volunteer.Police`). The application
-consumes trusted EasyAuth headers and resolves them through database mappings;
-do not add a parallel password login or environment-based authorization list.
+A push to `dev` deploys only after all CI jobs pass. The reusable workflow builds the exact tested SHA, deploys it, runs Alembic in the migration job, optionally seeds fictional DEV data, and checks:
 
-`AUTH_MODE=disabled` is for isolated local development only. Shared DEV and
-production environments should use `AUTH_MODE=easyauth`.
+- exact commit SHA from `/healthz`;
+- `/health/live`;
+- PostgreSQL connectivity through `/health/ready`;
+- successful migration-job execution.
 
-### 5. Configure transactional mail (optional)
+The `production` GitHub Environment and `main` deployment remain separate; configure manual approval/required reviewers before enabling production delivery.
 
-New installations use `MAIL_PROVIDER=console`, which never contacts an external
-mail service. It logs only provider/operation, recipient addresses/count and
-subject; bodies, attachment contents and credentials are excluded. Set a valid
-`MAIL_FROM_ADDRESS` before using the admin test page. Microsoft 365 is optional
-and the application starts normally without Graph configuration.
+## Database migrations and backups
 
-The reusable boundary is:
-
-```text
-business workflow -> MailService -> MailProvider
-                                  -> ConsoleMailProvider
-                                  -> MicrosoftGraphMailProvider
-                                     -> GraphTokenProvider
-```
-
-The legacy SMTP/outbox workflow is not migrated in this milestone. New business
-workflows should depend on `MailService`; a later database outbox can be inserted
-in front of it without changing provider code. No SMTP AUTH, Redis, Celery or
-background queue is introduced here.
-
-#### Microsoft 365 shared-mailbox setup
-
-1. Create or select the shared mailbox. Record its primary SMTP address and
-   Exchange alias; neither is hardcoded in the application.
-2. Create a dedicated single-tenant Entra application and its service principal.
-   Record the tenant ID, application/client ID and the **Enterprise application
-   service-principal Object ID** (not the App Registration Object ID).
-3. The only sending capability is `Mail.Send` (application). Do not grant
-   `Mail.Read`, `Mail.ReadWrite`, `MailboxSettings.Read`, `User.Read.All` or a
-   delegated permission. Graph delivery uses
-   `POST /users/{MAIL_FROM_ADDRESS}/sendMail`, never `/me/sendMail`, with
-   `https://graph.microsoft.com/.default`. In the traditional Entra flow this is
-   **API permissions → Microsoft Graph → Application permissions → Mail.Send →
-   Grant admin consent**. That grant is tenant-wide unless constrained by a
-   legacy Application Access Policy; do not leave it in place alongside the
-   preferred Exchange Application RBAC assignment described next.
-4. Restrict the app to the intended mailbox **before installing its credential**.
-   The preferred modern design is Exchange Online Application RBAC. The current
-   Microsoft model has an important subtlety: an Entra-admin-consented
-   organization-wide `Mail.Send` permission and an Exchange-scoped RBAC role are
-   additive. Leaving both assigned defeats the RBAC mailbox restriction. For the
-   preferred design, grant the scoped Exchange role below and remove any
-   unscoped Entra `Mail.Send` app-role assignment before production use. This is
-   the modern replacement for Application Access Policies.
-5. Create a client secret only for the initial credential model. Copy it once,
-   store it directly as the Container App secret `m365-client-secret`, then
-   discard the plaintext. Never place it in GitHub variables, Bicep parameter
-   files, commands retained in shell history or logs.
-6. Configure the Container App values listed below, open `/admin/mail`, and send
-   one test to an explicitly entered address.
-7. Verify the message in the shared mailbox Sent Items. Graph `202 Accepted`
-   means Exchange accepted the request, not that final delivery is guaranteed.
-8. Verify the scoped authorization returns `InScope=True` for the sender mailbox
-   and `InScope=False` for a known unauthorized mailbox. After RBAC cache
-   propagation, a direct Graph send targeting that unauthorized mailbox must
-   return 403. Never temporarily change the application's configured sender to a
-   real person's mailbox for this test.
-
-Microsoft documents the endpoint and `202`/Sent Items behavior in
-[user: sendMail](https://learn.microsoft.com/en-us/graph/api/user-sendmail?view=graph-rest-1.0)
-and the authorization model in
-[RBAC for Applications in Exchange Online](https://learn.microsoft.com/en-us/exchange/permissions-exo/application-rbac).
-
-**Security warning:** `Mail.Send` application access is powerful. An unscoped
-Entra grant permits app-only sending as mailboxes across the tenant. The
-application cannot enforce tenant-side mailbox isolation; Exchange Online must.
-
-One resource-scope pattern for a dedicated mailbox is an Exchange custom
-attribute. Choose an organization-specific marker and confirm it matches only
-the intended mailbox:
-
-```powershell
-Connect-ExchangeOnline
-
-Set-Mailbox -Identity "<SHARED-MAILBOX>" `
-  -CustomAttribute15 "VolunteerManagerMailSender"
-
-New-ManagementScope -Name "Volunteer Manager sender" `
-  -RecipientRestrictionFilter "CustomAttribute15 -eq 'VolunteerManagerMailSender'"
-
-New-ServicePrincipal `
-  -AppId "<M365-CLIENT-ID>" `
-  -ObjectId "<ENTERPRISE-APP-SERVICE-PRINCIPAL-OBJECT-ID>" `
-  -DisplayName "Volunteer Manager mail"
-
-New-ManagementRoleAssignment `
-  -Name "Volunteer Manager scoped Mail.Send" `
-  -App "<ENTERPRISE-APP-SERVICE-PRINCIPAL-OBJECT-ID>" `
-  -Role "Application Mail.Send" `
-  -CustomResourceScope "Volunteer Manager sender"
-
-Test-ServicePrincipalAuthorization `
-  -Identity "<M365-CLIENT-ID>" `
-  -Resource "<SHARED-MAILBOX>" | Format-Table
-
-Test-ServicePrincipalAuthorization `
-  -Identity "<M365-CLIENT-ID>" `
-  -Resource "<UNAUTHORIZED-MAILBOX>" | Format-Table
-```
-
-Review the scope's recipient preview and ensure no other mailbox carries the
-same marker. `Test-ServicePrincipalAuthorization` tests Exchange RBAC only; it
-does not include separate Entra grants. Remove any tenant-wide Entra
-`Mail.Send` consent, wait for permission cache propagation (Microsoft documents
-30 minutes to two hours), and perform the negative Graph test as the final proof.
-
-#### Runtime configuration
-
-Container App non-secret settings:
-
-```text
-MAIL_PROVIDER=graph
-MAIL_FROM_ADDRESS=<SHARED-MAILBOX-ADDRESS>
-MAIL_FROM_NAME=<DISPLAY-NAME>
-MAIL_REPLY_TO=<OPTIONAL-ADDRESS>
-M365_TENANT_ID=<TENANT-ID>
-M365_CLIENT_ID=<MAIL-APP-CLIENT-ID>
-M365_AUTH_MODE=client_secret
-```
-
-Secret/reference:
-
-```text
-Container App secret: m365-client-secret=<CLIENT-SECRET>
-Environment:          M365_CLIENT_SECRET=secretref:m365-client-secret
-```
-
-`infra/main.bicep` exposes all values and treats `m365ClientSecret` as secure.
-For an existing Container App, `scripts/bootstrap.ps1` preserves an existing
-secret reference, prompts for a missing secret with hidden input, and redacts
-native CLI output on secret-write failures. It does not create the shared
-mailbox, Graph permission or Exchange RBAC assignment.
-
-The client secret needs an owner and expiry alert. Rotate it by creating a second
-credential, updating `m365-client-secret`, sending an admin test, and only then
-deleting the old credential. Keep the overlap short. `M365_AUTH_MODE=managed_identity`
-is reserved behind `GraphTokenProvider` but intentionally fails closed today;
-Managed Identity is the preferred future credential model.
-
-#### Test mail and safe diagnostics
-
-- `GET /admin/mail` and `POST /admin/mail/test` require the existing `admin`
-  permission. The POST accepts one explicit recipient and always uses the
-  configured sender. It records `mail.test`, actor, provider, recipient count and
-  success/failure in `AuditLog`, but not the body or address.
-- `GET /debug/mail` is available only with `DEBUG=true`; otherwise it returns
-  404. It reports boolean credential/configuration state but never secrets,
-  tokens, raw provider responses or an environment dump.
-- HTML mail is rendered with autoescaping Jinja templates in
-  `app/templates/email/`. Never concatenate volunteer-controlled values into
-  HTML.
-- Graph retries only 429 and selected 5xx/network failures, honors bounded
-  numeric `Retry-After`, and does not blindly retry permanent 4xx errors.
-
-### 6. First deployment
-
-1. Confirm the `development` GitHub Environment and its variables (below).
-2. Confirm the Container App and migration job both reference the same
-   `database-url` secret.
-3. Optionally set GitHub Environment variable `SEED_DEMO_DATA=true` for a
-   disposable DEV database only. The controlled database deployment job runs
-   Alembic first and then the idempotent seed in the same execution; the web
-   container never migrates or seeds on startup.
-4. Push or merge the completed change to `dev`.
-5. CI runs Black, Ruff, pytest, SQLite migration checks, a disposable PostgreSQL
-   16 migration test, Bicep compilation and PowerShell parse validation.
-6. The `dev` push workflow calls the reusable DEV deployment only after its
-   test, PostgreSQL migration and infrastructure jobs all succeed. It then
-   builds/pushes the exact tested commit image, deploys the revision, runs the
-   same image as the database deployment job, waits for Alembic and the optional
-   seed to succeed, and verifies the exact commit SHA, liveness and DB readiness.
-
-Migration failure fails the GitHub deployment. It does not silently start a web
-container that mutates its own schema.
-
-## GitHub Environments and configuration
-
-The bootstrap writes these non-sensitive values as GitHub Environment Variables,
-not Secrets:
-
-- `AZURE_CLIENT_ID`
-- `AZURE_TENANT_ID`
-- `AZURE_SUBSCRIPTION_ID`
-- `AZURE_RESOURCE_GROUP`
-- `AZURE_CONTAINER_APP`
-- `AZURE_CONTAINER_REGISTRY`
-- `AZURE_CONTAINER_APP_ENVIRONMENT`
-- `AZURE_MIGRATION_JOB`
-- `AZURE_LOCATION`
-- `APP_BASE_URL`
-
-The workflow temporarily supports the old ST. PRIDE secret names as fallbacks so
-existing OIDC is not broken during migration. Bootstrap moves non-sensitive
-configuration to Variables without deleting legacy Secrets.
-
-Environment behavior:
-
-- `development`: `dev` deploys automatically after successful CI.
-- `production`: reserved for `main`; configure Required Reviewers/manual approval
-  before adding/enabling a production workflow.
-
-This task does not deploy production and does not modify `main`.
-
-## Database migrations and diagnostics
-
-Alembic is the production schema authority:
+Alembic is the schema authority for both databases.
 
 ```bash
 DATABASE_URL="sqlite:///./volunteer.db" alembic upgrade head
 DATABASE_URL="postgresql+psycopg://.../volunteer?sslmode=require" alembic upgrade head
 ```
 
-Do not run `Base.metadata.create_all()` in production. It is used only in isolated
-unit tests. Do not add `alembic upgrade head` to the application startup command.
+Do not run `Base.metadata.create_all()` in production and do not add migrations to application startup.
 
-- `/health/live` proves the process is serving without querying the database.
-- `/health/ready` returns success only when the database is reachable.
-- `/admin/db` requires the existing admin permission and renders reachability,
-  expected/current Alembic revision and required-table status without returning
-  HTTP 500 for an empty, pending or unavailable database.
-- `/debug/db` returns the same safe structured result only when `DEBUG=true`;
-  otherwise it returns 404.
+### SQLite backup
 
-Diagnostics never return `DATABASE_URL`, passwords, access tokens or raw driver
-exceptions.
+Prefer SQLite's online backup API:
 
-## Upgrading an existing SQLite deployment
-
-Do not attach SQLite on Azure Files to the new production architecture and do not
-delete the old database automatically.
-
-1. Stop or quiesce writes to SQLite and take a verified backup.
-2. Provision PostgreSQL without modifying the running Container App.
-3. Deploy the PostgreSQL-capable image and configure the `database-url` secrets
-   for both web app and migration job.
-4. Run the Container Apps migration job and verify `/admin/db` or `/debug/db`.
-5. If SQLite contains data that must survive, migrate it with a separate,
-   rehearsed data-copy process; Alembic creates schema, not data transfer.
-6. Compare record counts and critical workflows, then switch traffic.
-7. Retain the SQLite backup until rollback and business validation are complete.
-8. Only then decommission the SQLite mount; do not automatically delete Azure
-   Files because it may later hold exports or uploaded files.
-
-For the current ST. PRIDE DEV instance, the recent SQLite database contains
-disposable fictional data, so data transfer is optional. PostgreSQL resource and
-secret provisioning must still occur before the new DEV workflow is enabled.
-
-## Networking and security notes
-
-The default DEV template uses PostgreSQL public networking plus the Azure
-services firewall rule (`0.0.0.0` to `0.0.0.0`), not an unrestricted Internet
-range, and requires TLS through `sslmode=require`. This is the least disruptive
-model for an existing Container Apps environment without VNet integration.
-
-For production, prefer private networking when the Container Apps environment is
-already VNet-integrated. Do not recreate a working environment merely to force
-private networking into this milestone. The Container App and migration job have
-system-assigned identities to prepare for future Entra PostgreSQL authentication;
-password authentication remains the controlled first milestone.
-
-## Troubleshooting
-
-### OIDC subject mismatch
-
-Check that GitHub uses the `development` Environment and that the federated
-subject is exactly:
-
-```text
-repo:<owner>/<repository>:environment:development
+```bash
+sqlite3 /data/volunteer.db '.backup /backup/volunteer.db'
 ```
 
-Branch-subject credentials are not equivalent to Environment-subject credentials.
+Alternatively stop the application before copying the file. Never blindly copy a database while it is being written.
 
-### Missing GitHub Environment or variables
+### PostgreSQL backup
 
-Run `scripts/bootstrap.ps1` again. It is safe to repeat. Confirm your `gh` token
-can administer repository environments and Actions variables.
+Use a consistent dump and test restores:
 
-### Missing Contributor rights
+```bash
+pg_dump -Fc -h <host> -U <user> volunteer > volunteer.dump
+createdb volunteer_restore_test
+pg_restore -d volunteer_restore_test volunteer.dump
+```
 
-The OIDC service principal needs Contributor on the selected DEV Resource Group.
-Subscription-wide Owner is neither required nor recommended.
+## Diagnostics and troubleshooting
 
-### `roleAssignments/write` failure
+### Safe endpoints
 
-Contributor cannot normally grant roles. Run only the exact RG-scoped command
-printed by bootstrap using an identity with User Access Administrator or Owner,
-then rerun bootstrap. The script never escalates itself.
+| Endpoint             | Purpose                                    | Access            |
+| -------------------- | ------------------------------------------ | ----------------- |
+| `/healthz`           | health plus deployed version/SHA           | public            |
+| `/health/live`       | process liveness                           | public            |
+| `/health/ready`      | database readiness                         | public            |
+| `/admin/db`          | Alembic revision and required-table status | admin             |
+| `/admin/mail`        | provider status and test mail              | admin             |
+| `/admin/permissions` | permission mappings                        | admin             |
+| `/debug/config`      | safe configuration flags                   | `DEBUG=true` only |
+| `/debug/db`          | safe database status                       | `DEBUG=true` only |
+| `/debug/easyauth`    | safe EasyAuth diagnostics                  | `DEBUG=true` only |
+| `/debug/oidc`        | safe OIDC diagnostics                      | `DEBUG=true` only |
+| `/debug/mail`        | safe mail configuration flags              | `DEBUG=true` only |
 
-### PostgreSQL connectivity
+Debug endpoints return `404` when `DEBUG=false`. They never expose database URLs, client secrets, access/ID/refresh tokens, Graph bearer tokens, raw authorization responses, or a full environment dump.
 
-Verify the Flexible Server firewall/network choice, the database `volunteer`,
-DNS resolution from Container Apps, and `sslmode=require`. Confirm both the web
-app and migration job use a `DATABASE_URL` secret reference. Never print the
-secret value in Actions logs.
+### Common problems
 
-### Pending or missing Alembic schema
+#### OIDC redirect or state failure
 
-Inspect `/admin/db`, then check the migration Job execution. Re-run the deployment
-or manually start the job only after verifying it points at the intended database
-and application image.
+- Confirm `APP_BASE_URL` exactly matches the externally visible HTTPS origin.
+- Register `<APP_BASE_URL>/auth/callback` at the provider.
+- Confirm reverse-proxy scheme/host handling and that one process handles the session.
 
-### Unhealthy Container App revision
+#### EasyAuth login works but access is denied
 
-The DEV workflow reports bounded revision state, filtered startup logs and the
-migration execution status. `/healthz` must return the exact deployed commit SHA;
-an HTTP 200 from an older revision is not considered success.
+- Confirm `AUTH_MODE=easyauth` and the Container App issuer/audience.
+- Inspect safe `/debug/easyauth` output with `DEBUG=true`.
+- Check role/group/email mappings at `/admin/permissions`.
 
-### EasyAuth failures
+#### Database schema is pending
 
-Confirm the Container App authentication provider, issuer/audience, redirect
-URI and `AUTH_MODE=easyauth`. Alembic seeds the initial `Volunteer.Admin` App
-Role mapping; later mappings are maintained in `/admin/permissions`.
-`/debug/easyauth` is available only with `DEBUG=true` and does not expose access
-tokens.
+- Inspect `/admin/db`.
+- Run `alembic upgrade head` using the same `DATABASE_URL` as the application.
+- In Azure, inspect the migration-job execution; the web container will not repair schema automatically.
 
-## Application branding
+#### Azure OIDC subject mismatch
 
-Administrators can manage the application logo at `/admin/branding`. Branding
-is stored in the application database and therefore works identically with
-SQLite and PostgreSQL. It requires no writable container filesystem, Azure
-Files or image rebuild. The admin can choose exactly one override:
+- Confirm the workflow uses the `development` GitHub Environment.
+- Confirm the federated subject exactly matches `repo:<owner>/<repository>:environment:development`.
 
-- an HTTP(S) logo URL, rendered by the browser with the bundled logo as an
-  automatic load-error fallback; or
-- a PNG, JPEG or strictly validated SVG upload of at most 2 MB.
+#### DEV returns an old revision
 
-Raster uploads are decoded, stripped of metadata, resized to at most
-1600 × 800 pixels and re-encoded before storage. SVG uploads reject scripts,
-event handlers, embedded active elements, DTD/entities and external resources.
-The rendered logo also has fixed maximum display dimensions so it cannot break
-the layout. Resetting removes the override and immediately restores
-`app/static/images/st-pride-logo.png`.
+- The deployment workflow requires `/healthz` to return the exact tested SHA, not merely HTTP 200.
+- Inspect the latest Container App revision and workflow diagnostic logs.
 
-Remote logo URLs are never fetched by the application server. This avoids an
-SSRF path; normal browser caching still applies to the remote asset. Private or
-local IP literals, `localhost`, credentials in URLs and non-HTTP(S) schemes are
-rejected. Logo URL, upload and reset changes are admin-only and audited without
-storing uploaded content or URL query parameters in the audit log.
+#### Graph returns 403
 
-## Quality gates
+- Confirm the configured sender exactly matches the mailbox in the Exchange scope.
+- Confirm `Application Mail.Send` is assigned to the correct Enterprise Application service principal.
+- Re-run `Test-ServicePrincipalAuthorization`; allow for permission-cache propagation.
 
-## Permission management
+## Development and CI
 
-Authorization mappings are stored only in the application database. The former
-`config/permissions.yaml` file has been removed. Alembic creates the four system
-permissions during deployment without overwriting later administrator changes:
-
-- `admin`: full administration, including permission and technical diagnostics
-- `manager`: all current operational application access except database
-  diagnostics, SMTP configuration and permission management
-- `checkin`: only event-day check-in, QR scan and check-in/check-out work
-- `police`: reserved placeholder; it grants no current route access
-
-Each permission can map an App Role, group object ID, or normalized email.
-App Roles are preferred; group UUIDs are authoritative while their optional
-labels are informational only. Email is an emergency/fallback path. A match on
-any mapping grants access; database errors, missing permissions and empty
-mappings deny access. The last `admin` mapping cannot be removed. Permission
-changes are audited and are managed at `/admin/permissions` by administrators
-only. No YAML file is read or written by runtime authorization.
-
-Run before integration:
+Run the complete local gate before opening a pull request:
 
 ```bash
 black .
@@ -687,21 +553,45 @@ ruff check .
 pytest
 ```
 
-Regular tests require no Azure account, secrets, `/data` access or production
-PostgreSQL. PostgreSQL-specific migration semantics are tested in GitHub Actions
-with a disposable PostgreSQL 16 service container.
+Validate Compose files when Docker Compose is available:
 
-## Repository layout
-
-```text
-app/                    FastAPI application, auth, models and services
-migrations/             Alembic schema history
-infra/                  Bicep source, modules, parameters and compiled ARM JSON
-scripts/bootstrap.ps1   Idempotent Azure/GitHub/OIDC bootstrap
-scripts/start.sh        Deterministic web-only container entrypoint
-.github/workflows/      CI and post-CI DEV deployment
-tests/                  SQLite unit and PostgreSQL integration tests
+```bash
+docker compose -f deploy/docker-compose.sqlite.yml config
+docker compose -f deploy/docker-compose.postgres.yml config
 ```
 
-See [DECISIONS.md](DECISIONS.md) for architecture decisions and
-[DEMO.md](DEMO.md) for a product walkthrough.
+GitHub Actions additionally verifies repeatable SQLite migrations, migrations and model semantics against a disposable PostgreSQL 16 service, Bicep compilation, and PowerShell parsing. Tests require no Azure, Microsoft 365, external OIDC provider, production PostgreSQL, or real secrets.
+
+### Repository layout
+
+```text
+app/                    FastAPI routes, auth, models, services, templates
+app/auth/               disabled, EasyAuth, and generic OIDC adapters
+app/mail/               provider-neutral mail models/service/providers
+deploy/                 SQLite and PostgreSQL Docker Compose editions
+infra/                  Bicep source, modules, parameters, compiled ARM JSON
+migrations/             shared Alembic schema history
+scripts/bootstrap.ps1   idempotent Azure/GitHub/OIDC bootstrap
+scripts/deploy_database.py
+                        deployment-time migration and optional DEV seed
+tests/                  SQLite tests and PostgreSQL integration tests
+.github/workflows/      CI and post-CI DEV deployment
+```
+
+Architecture rationale is recorded in [DECISIONS.md](DECISIONS.md). [DEMO.md](DEMO.md) contains a product walkthrough.
+
+## Security notes
+
+- Never expose `AUTH_MODE=disabled` to an untrusted network.
+- Protect `.env`, OIDC client secrets, PostgreSQL credentials, and Graph credentials; never bake them into an image.
+- Keep `DEBUG=false` in public deployments.
+- Use HTTPS for OIDC and all public deployments.
+- Restrict Microsoft 365 application mail access at Exchange Online level and prove the negative mailbox test.
+- Keep SQLite on local storage and at one replica.
+- Treat public registration edit links and QR links as bearer-style secrets.
+- Review reverse-proxy headers, request-size limits, TLS, backups, restore tests, and update procedures before production use.
+- Existing POST forms rely on same-site authentication boundaries; dedicated CSRF tokens remain a recommended hardening milestone for broader Internet deployments.
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).

@@ -1,0 +1,7 @@
+{
+  "config": {
+    // Prose is formatted by Prettier. Long URLs and wide reference tables are
+    // intentionally kept readable in their source form.
+    "MD013": false
+  }
+}
