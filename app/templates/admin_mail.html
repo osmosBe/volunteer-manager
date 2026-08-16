@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+  <h1>Transactional mail</h1>
+  <p>Signed in as {{ admin_user.name or admin_user.email }}</p>
+  <table class="table table-sm">
+    <tbody>
+      <tr><th scope="row">Provider</th><td>{{ diagnostics.provider }}</td></tr>
+      <tr><th scope="row">Sender</th><td>{{ diagnostics.sender or "not configured" }}</td></tr>
+      <tr><th scope="row">Authentication mode</th><td>{{ diagnostics.auth_mode }}</td></tr>
+      <tr><th scope="row">Provider configured</th><td>{{ "yes" if diagnostics.configured else "no" }}</td></tr>
+      {% if last_test %}
+        <tr><th scope="row">Last test</th><td>{{ "successful" if last_test.success else "failed" }} at {{ last_test.timestamp }}{% if last_test.error_code %} ({{ last_test.error_code }}){% endif %}</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+  {% if test_result %}
+    <div class="alert {{ 'alert-success' if test_result.success else 'alert-danger' }}">
+      {% if test_result.success %}Test email accepted by {{ test_result.provider }}.{% else %}Test email failed ({{ test_result.error_code }}).{% endif %}
+    </div>
+  {% endif %}
+  <form method="post" action="/admin/mail/test" class="card card-body mb-3">
+    <label class="form-label" for="recipient">Explicit test recipient</label>
+    <input class="form-control mb-3" id="recipient" name="recipient" type="email" required autocomplete="email">
+    <button class="btn btn-primary" type="submit">Send test email</button>
+  </form>
+  <a href="/admin">Back to admin dashboard</a>
+{% endblock %}

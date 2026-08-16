@@ -1,0 +1,38 @@
+# Declarative target state for the existing DEV Container App. Values in angle
+# brackets are intentionally deployment-specific; no credentials belong here.
+name: ca-stpride-volunteer-dev
+type: Microsoft.App/containerApps
+properties:
+  managedEnvironmentId: <MANAGED_ENVIRONMENT_RESOURCE_ID>
+  configuration:
+    activeRevisionsMode: Single
+    ingress:
+      external: true
+      targetPort: 8000
+      transport: auto
+  template:
+    containers:
+      - name: volunteer-manager
+        image: <ACR_LOGIN_SERVER>/stpride-volunteer-management:<COMMIT_SHA>
+        env:
+          - name: DATABASE_URL
+            secretRef: database-url
+          - name: MAIL_PROVIDER
+            value: console
+          - name: MAIL_FROM_ADDRESS
+            value: <SHARED_MAILBOX_ADDRESS_OR_EMPTY>
+          - name: MAIL_FROM_NAME
+            value: <SENDER_DISPLAY_NAME>
+          - name: MAIL_REPLY_TO
+            value: <REPLY_TO_ADDRESS_OR_EMPTY>
+          - name: M365_TENANT_ID
+            value: <M365_TENANT_ID_OR_EMPTY>
+          - name: M365_CLIENT_ID
+            value: <M365_CLIENT_ID_OR_EMPTY>
+          - name: M365_AUTH_MODE
+            value: client_secret
+          # Graph mode only: additionally create m365-client-secret and add
+          # M365_CLIENT_SECRET=secretref:m365-client-secret.
+    scale:
+      minReplicas: 1
+      maxReplicas: 2

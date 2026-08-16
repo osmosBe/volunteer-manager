@@ -1,0 +1,263 @@
+name: Deploy DEV
+
+on:
+  workflow_call:
+    inputs:
+      deploy_sha:
+        description: Commit SHA that passed CI and must be deployed
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  IMAGE_NAME: stpride-volunteer-management
+  DEPLOY_SHA: ${{ inputs.deploy_sha }}
+
+jobs:
+  build-and-deploy:
+    name: Build, migrate and deploy DEV
+    runs-on: ubuntu-latest
+    environment: development
+
+    steps:
+      - name: Checkout tested revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
+
+      - name: Resolve deployment configuration
+        id: config
+        env:
+          CONFIG_ACR: ${{ vars.AZURE_CONTAINER_REGISTRY || secrets.AZURE_CONTAINER_REGISTRY }}
+          CONFIG_APP: ${{ vars.AZURE_CONTAINER_APP || secrets.AZURE_CONTAINER_APP_NAME }}
+          CONFIG_GROUP: ${{ vars.AZURE_RESOURCE_GROUP || secrets.AZURE_RESOURCE_GROUP }}
+          CONFIG_JOB: ${{ vars.AZURE_MIGRATION_JOB }}
+          CONFIG_URL: ${{ vars.APP_BASE_URL || secrets.DEV_APP_URL }}
+        run: |
+          for value_name in CONFIG_ACR CONFIG_APP CONFIG_GROUP CONFIG_JOB CONFIG_URL; do
+            value="${!value_name}"
+            if [ -z "$value" ]; then
+              echo "Missing required development environment configuration: $value_name" >&2
+              exit 1
+            fi
+          done
+          acr_name="${CONFIG_ACR%%.azurecr.io}"
+          {
+            echo "ACR_NAME=$acr_name"
+            echo "ACR_LOGIN_SERVER=$acr_name.azurecr.io"
+            echo "CONTAINER_APP_NAME=$CONFIG_APP"
+            echo "RESOURCE_GROUP=$CONFIG_GROUP"
+            echo "MIGRATION_JOB_NAME=$CONFIG_JOB"
+            echo "DEV_APP_URL=$CONFIG_URL"
+            echo "DEPLOY_IMAGE=$acr_name.azurecr.io/${IMAGE_NAME}:${DEPLOY_SHA}"
+          } >> "$GITHUB_ENV"
+          {
+            echo "acr_login_server=$acr_name.azurecr.io"
+            echo "container_app=$CONFIG_APP"
+            echo "resource_group=$CONFIG_GROUP"
+            echo "deploy_image=$acr_name.azurecr.io/${IMAGE_NAME}:${DEPLOY_SHA}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Azure login via existing OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID || secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID || secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID || secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Validate migration infrastructure
+        run: |
+          az containerapp show \
+            --name "$CONTAINER_APP_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --output none
+          az containerapp job show \
+            --name "$MIGRATION_JOB_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --output none
+          database_ref=$(az containerapp job show \
+            --name "$MIGRATION_JOB_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --query "properties.template.containers[0].env[?name=='DATABASE_URL'].secretRef | [0]" \
+            --output tsv)
+          if [ -z "$database_ref" ]; then
+            echo "Migration job has no DATABASE_URL secret reference. Run infra/main.bicep before deployment." >&2
+            exit 1
+          fi
+
+      - name: Login to Azure Container Registry
+        run: az acr login --name "$ACR_NAME"
+
+      - name: Build and deploy tested image
+        uses: azure/container-apps-deploy-action@v2
+        with:
+          appSourcePath: ${{ github.workspace }}
+          dockerfilePath: Dockerfile
+          registryUrl: ${{ steps.config.outputs.acr_login_server }}
+          containerAppName: ${{ steps.config.outputs.container_app }}
+          resourceGroup: ${{ steps.config.outputs.resource_group }}
+          imageToBuild: ${{ steps.config.outputs.deploy_image }}
+          buildArguments: |
+            APP_VERSION=${{ env.DEPLOY_SHA }}
+
+      - name: Configure application ingress port
+        run: |
+          az containerapp ingress update \
+            --name "$CONTAINER_APP_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --target-port 8000 \
+            --output none
+
+      - name: Configure DEV demo mode
+        env:
+          CONFIG_DEMO_MODE: ${{ vars.DEMO_MODE }}
+        run: |
+          case "$CONFIG_DEMO_MODE" in
+            ""|true)
+              demo_mode=true
+              ;;
+            false)
+              demo_mode=false
+              ;;
+            *)
+              echo "DEMO_MODE must be true or false when configured." >&2
+              exit 1
+              ;;
+          esac
+          az containerapp update \
+            --name "$CONTAINER_APP_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --set-env-vars "DEMO_MODE=$demo_mode" \
+            --output none
+          echo "DEPLOYED_DEMO_MODE=$demo_mode" >> "$GITHUB_ENV"
+
+      - name: Run database deployment job
+        env:
+          CONFIG_SEED_DEMO_DATA: ${{ vars.SEED_DEMO_DATA }}
+        run: |
+          wait_for_job() {
+            execution_name="$1"
+            for attempt in $(seq 1 90); do
+              execution_status=$(az containerapp job execution show \
+                --name "$MIGRATION_JOB_NAME" \
+                --resource-group "$RESOURCE_GROUP" \
+                --job-execution-name "$execution_name" \
+                --query properties.status \
+                --output tsv 2>/dev/null || true)
+              case "$execution_status" in
+                Succeeded)
+                  echo "Container Apps Job execution $execution_name succeeded."
+                  return 0
+                  ;;
+                Failed|Stopped|Degraded)
+                  echo "Container Apps Job execution $execution_name ended as $execution_status." >&2
+                  return 1
+                  ;;
+              esac
+              echo "Waiting for database deployment execution $execution_name ($attempt/90): ${execution_status:-pending}."
+              sleep 5
+            done
+            echo "Timed out waiting for database deployment execution $execution_name." >&2
+            return 1
+          }
+
+          seed_demo_data=false
+          if [ "$CONFIG_SEED_DEMO_DATA" = "true" ]; then
+            seed_demo_data=true
+          fi
+          az containerapp job update \
+            --name "$MIGRATION_JOB_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --image "$DEPLOY_IMAGE" \
+            --command ./scripts/deploy_database.py \
+            --set-env-vars "SEED_DEMO_DATA=$seed_demo_data" \
+            --output none
+          execution_name=$(az containerapp job start \
+            --name "$MIGRATION_JOB_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --query name \
+            --output tsv)
+          if [ -z "$execution_name" ]; then
+            echo "Azure did not return a database deployment execution name." >&2
+            exit 1
+          fi
+          wait_for_job "$execution_name"
+          echo "MIGRATION_EXECUTION=$execution_name" >> "$GITHUB_ENV"
+          echo "Database deployment completed (fictional seed: $seed_demo_data)."
+
+      - name: Verify migration and DEV health
+        env:
+          EXPECTED_VERSION: ${{ env.DEPLOY_SHA }}
+        run: |
+          base_url="${DEV_APP_URL%/}"
+          actual_version=""
+          for attempt in $(seq 1 60); do
+            health_json=$(curl --fail --silent --show-error "$base_url/healthz" || true)
+            actual_version=$(printf '%s' "$health_json" | python -c 'import json,sys; print(json.load(sys.stdin).get("version", ""))' 2>/dev/null || true)
+            if [ "$actual_version" = "$EXPECTED_VERSION" ]; then
+              break
+            fi
+            echo "Waiting for migrated revision ($attempt/60); currently '${actual_version:-unavailable}'."
+            sleep 5
+          done
+          if [ "$actual_version" != "$EXPECTED_VERSION" ]; then
+            echo "DEV revision mismatch: expected $EXPECTED_VERSION, got ${actual_version:-unavailable}." >&2
+            exit 1
+          fi
+          curl --fail --silent --show-error "$base_url/health/live" >/dev/null
+          ready_json=$(curl --fail --silent --show-error "$base_url/health/ready")
+          ready_database=$(printf '%s' "$ready_json" | python -c 'import json,sys; print(json.load(sys.stdin).get("database", ""))')
+          if [ "$ready_database" != "connected" ]; then
+            echo "DEV readiness check did not confirm database connectivity." >&2
+            exit 1
+          fi
+          landing_html=$(curl --fail --silent --show-error "$base_url/")
+          if [ "$DEPLOYED_DEMO_MODE" = "true" ]; then
+            printf '%s' "$landing_html" | grep -q 'data-demo-mode-indicator'
+          elif printf '%s' "$landing_html" | grep -q 'data-demo-mode-indicator'; then
+            echo "DEV unexpectedly displays the demo-mode indicator." >&2
+            exit 1
+          fi
+          echo "DEV revision, Alembic migration, liveness, readiness and demo-mode presentation passed for $EXPECTED_VERSION."
+
+      - name: Diagnose failed DEV deployment
+        if: failure()
+        run: |
+          latest_revision=$(az containerapp revision list \
+            --name "$CONTAINER_APP_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --query "sort_by(@, &properties.createdTime)[-1].name" \
+            --output tsv 2>/dev/null || true)
+          if [ -n "$latest_revision" ]; then
+            az containerapp revision show \
+              --name "$CONTAINER_APP_NAME" \
+              --resource-group "$RESOURCE_GROUP" \
+              --revision "$latest_revision" \
+              --query "{revision:name,active:properties.active,health:properties.healthState,provisioning:properties.provisioningState,replicas:properties.replicas}" \
+              --output json || true
+            az containerapp logs show \
+              --name "$CONTAINER_APP_NAME" \
+              --resource-group "$RESOURCE_GROUP" \
+              --revision "$latest_revision" \
+              --type system \
+              --tail 100 2>&1 | grep -Eai 'error|fail|exception|alembic|sqlalchemy|psycopg|postgres|permission|denied|startup' | tail -n 80 || true
+          fi
+          if [ -n "${MIGRATION_EXECUTION:-}" ]; then
+            az containerapp job execution show \
+              --name "$MIGRATION_JOB_NAME" \
+              --resource-group "$RESOURCE_GROUP" \
+              --job-execution-name "$MIGRATION_EXECUTION" \
+              --query "{name:name,status:properties.status,start:properties.startTime,end:properties.endTime}" \
+              --output json || true
+          fi
+          if [ -n "${SEED_EXECUTION:-}" ]; then
+            az containerapp job execution show \
+              --name "$MIGRATION_JOB_NAME" \
+              --resource-group "$RESOURCE_GROUP" \
+              --job-execution-name "$SEED_EXECUTION" \
+              --query "{name:name,status:properties.status,start:properties.startTime,end:properties.endTime}" \
+              --output json || true
+          fi

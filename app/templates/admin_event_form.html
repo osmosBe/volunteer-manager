@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% from "components/form_errors.html" import field_error, form_error_summary %}
+{% block content %}
+<h1>{% if event %}Veranstaltung bearbeiten{% else %}Veranstaltung anlegen{% endif %}</h1>
+{{ form_error_summary(error, field_errors, "event-form-errors") }}
+<form method="post" class="row g-3">
+  <div class="col-md-8">
+    <label class="form-label" for="name">Titel</label>
+    <input class="form-control{% if field_errors.get('name') %} is-invalid{% endif %}" required id="name" name="name" value="{{ form_values.name }}"{% if field_errors.get('name') %} aria-invalid="true" aria-describedby="name-error"{% endif %}>
+    {{ field_error("name", field_errors) }}
+  </div>
+  <div class="col-md-4">
+    <label class="form-label" for="slug">URL-Kürzel</label>
+    <input class="form-control{% if field_errors.get('slug') %} is-invalid{% endif %}" required pattern="[a-z0-9-]+" id="slug" name="slug" value="{{ form_values.slug }}"{% if field_errors.get('slug') %} aria-invalid="true" aria-describedby="slug-error"{% endif %}>
+    {{ field_error("slug", field_errors) }}
+  </div>
+  <div class="col-12">
+    <label class="form-label" for="short_description">Kurzbeschreibung</label>
+    <input class="form-control" maxlength="500" id="short_description" name="short_description" value="{{ form_values.short_description }}">
+  </div>
+  <div class="col-12">
+    <label class="form-label" for="description">Öffentliche Beschreibung</label>
+    <textarea class="form-control" rows="6" id="description" name="description">{{ form_values.description }}</textarea>
+  </div>
+  <div class="col-md-4">
+    <label class="form-label" for="start_date">Startdatum</label>
+    <input class="form-control{% if field_errors.get('start_date') %} is-invalid{% endif %}" required type="date" id="start_date" name="start_date" value="{{ form_values.start_date }}"{% if field_errors.get('start_date') %} aria-invalid="true" aria-describedby="start_date-error"{% endif %}>
+    {{ field_error("start_date", field_errors) }}
+  </div>
+  <div class="col-md-2">
+    <label class="form-label" for="start_time">Startzeit</label>
+    <input class="form-control{% if field_errors.get('start_time') %} is-invalid{% endif %}" type="time" id="start_time" name="start_time" value="{{ form_values.start_time }}"{% if field_errors.get('start_time') %} aria-invalid="true" aria-describedby="start_time-error"{% endif %}>
+    {{ field_error("start_time", field_errors) }}
+  </div>
+  <div class="col-md-4">
+    <label class="form-label" for="end_date">Enddatum</label>
+    <input class="form-control{% if field_errors.get('end_date') %} is-invalid{% endif %}" required type="date" id="end_date" name="end_date" value="{{ form_values.end_date }}" data-range-start-date="start_date" data-range-start-time="start_time" data-range-end-time="end_time" data-range-message="Das Ende muss nach dem Beginn liegen."{% if field_errors.get('end_date') %} aria-invalid="true" aria-describedby="end_date-error"{% endif %}>
+    {{ field_error("end_date", field_errors) }}
+  </div>
+  <div class="col-md-2">
+    <label class="form-label" for="end_time">Endzeit</label>
+    <input class="form-control{% if field_errors.get('end_time') %} is-invalid{% endif %}" type="time" id="end_time" name="end_time" value="{{ form_values.end_time }}"{% if field_errors.get('end_time') %} aria-invalid="true" aria-describedby="end_time-error"{% endif %}>
+    {{ field_error("end_time", field_errors) }}
+  </div>
+  <div class="col-md-6">
+    <label class="form-label" for="venue">Ort</label>
+    <input class="form-control" id="venue" name="venue" value="{{ form_values.venue }}">
+  </div>
+  <div class="col-md-6">
+    <label class="form-label" for="address">Adresse</label>
+    <input class="form-control" id="address" name="address" value="{{ form_values.address }}">
+  </div>
+  <div class="col-12">
+    <label class="form-label" for="public_meeting_point">Allgemeiner Treffpunkt</label>
+    <input class="form-control" id="public_meeting_point" name="public_meeting_point" value="{{ form_values.public_meeting_point }}">
+  </div>
+  <div class="col-md-4">
+    <label class="form-label" for="registration_open_date">Anmeldung öffnet am</label>
+    <input class="form-control{% if field_errors.get('registration_open_date') %} is-invalid{% endif %}" required type="date" id="registration_open_date" name="registration_open_date" value="{{ form_values.registration_open_date }}"{% if field_errors.get('registration_open_date') %} aria-invalid="true" aria-describedby="registration_open_date-error"{% endif %}>
+    {{ field_error("registration_open_date", field_errors) }}
+  </div>
+  <div class="col-md-2">
+    <label class="form-label" for="registration_open_time">Uhrzeit</label>
+    <input class="form-control{% if field_errors.get('registration_open_time') %} is-invalid{% endif %}" type="time" id="registration_open_time" name="registration_open_time" value="{{ form_values.registration_open_time }}"{% if field_errors.get('registration_open_time') %} aria-invalid="true" aria-describedby="registration_open_time-error"{% endif %}>
+    {{ field_error("registration_open_time", field_errors) }}
+  </div>
+  <div class="col-md-4">
+    <label class="form-label" for="registration_close_date">Anmeldung schließt am</label>
+    <input class="form-control{% if field_errors.get('registration_close_date') %} is-invalid{% endif %}" required type="date" id="registration_close_date" name="registration_close_date" value="{{ form_values.registration_close_date }}" data-range-start-date="registration_open_date" data-range-start-time="registration_open_time" data-range-end-time="registration_close_time" data-range-message="Das Ende der Anmeldung muss nach deren Beginn liegen."{% if field_errors.get('registration_close_date') %} aria-invalid="true" aria-describedby="registration_close_date-error"{% endif %}>
+    {{ field_error("registration_close_date", field_errors) }}
+  </div>
+  <div class="col-md-2">
+    <label class="form-label" for="registration_close_time">Uhrzeit</label>
+    <input class="form-control{% if field_errors.get('registration_close_time') %} is-invalid{% endif %}" type="time" id="registration_close_time" name="registration_close_time" value="{{ form_values.registration_close_time }}"{% if field_errors.get('registration_close_time') %} aria-invalid="true" aria-describedby="registration_close_time-error"{% endif %}>
+    {{ field_error("registration_close_time", field_errors) }}
+  </div>
+  <div class="col-md-4">
+    <label class="form-label" for="contact_name">Kontaktname</label>
+    <input class="form-control" id="contact_name" name="contact_name" value="{{ form_values.contact_name }}">
+  </div>
+  <div class="col-md-4">
+    <label class="form-label" for="contact_email">Kontakt-E-Mail</label>
+    <input class="form-control{% if field_errors.get('contact_email') %} is-invalid{% endif %}" type="email" id="contact_email" name="contact_email" value="{{ form_values.contact_email }}"{% if field_errors.get('contact_email') %} aria-invalid="true" aria-describedby="contact_email-error"{% endif %}>
+    {{ field_error("contact_email", field_errors) }}
+  </div>
+  <div class="col-md-4">
+    <label class="form-label" for="contact_phone">Kontakttelefon</label>
+    <input class="form-control" id="contact_phone" name="contact_phone" value="{{ form_values.contact_phone }}">
+  </div>
+  <div class="col-12">
+    <label class="form-label" for="briefing">Allgemeines Briefing</label>
+    <textarea class="form-control" rows="4" id="briefing" name="briefing">{{ form_values.briefing }}</textarea>
+  </div>
+  <div class="col-md-4">
+    <label class="form-label" for="clothing_and_material">Kleidung und Material</label>
+    <textarea class="form-control" rows="4" id="clothing_and_material" name="clothing_and_material">{{ form_values.clothing_and_material }}</textarea>
+  </div>
+  <div class="col-md-4">
+    <label class="form-label" for="catering_info">Verpflegung</label>
+    <textarea class="form-control" rows="4" id="catering_info" name="catering_info">{{ form_values.catering_info }}</textarea>
+  </div>
+  <div class="col-md-4">
+    <label class="form-label" for="accessibility_info">Barrierefreiheit</label>
+    <textarea class="form-control" rows="4" id="accessibility_info" name="accessibility_info">{{ form_values.accessibility_info }}</textarea>
+  </div>
+  <div class="col-md-4">
+    <label class="form-label" for="status">Status</label>
+    <select class="form-select" id="status" name="status">
+      {% for value in ['draft','registration_open','registration_closed','ongoing','completed','archived'] %}
+      <option value="{{ value }}" {% if form_values.status == value %}selected{% endif %}>{{ value }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-md-4 form-check align-self-end mb-2">
+    <input class="form-check-input" type="checkbox" value="true" id="allows_minors" name="allows_minors" {% if form_values.allows_minors %}checked{% endif %}>
+    <label class="form-check-label" for="allows_minors">Teilnahme unter 18 grundsätzlich erlauben</label>
+  </div>
+  <div class="col-md-4 form-check align-self-end mb-2">
+    <input class="form-check-input" type="checkbox" value="true" id="is_public" name="is_public" {% if form_values.is_public %}checked{% endif %}>
+    <label class="form-check-label" for="is_public">Öffentlich sichtbar</label>
+  </div>
+  <div class="col-12">
+    <p class="form-text">Bei aktivierter U18-Teilnahme müssen die einzelnen Schichten ebenfalls für Minderjährige freigegeben sein.</p>
+    <button class="btn btn-primary" type="submit">Speichern</button>
+    <a class="btn btn-outline-secondary" href="{% if event %}/admin/veranstaltungen/{{ event.id }}{% else %}/admin{% endif %}">Abbrechen</a>
+  </div>
+</form>
+{% endblock %}

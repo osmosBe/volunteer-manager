@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+  <section class="py-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3"><h1 class="display-5">Gemeinsam machen wir PRIDE möglich.</h1><a class="btn btn-outline-secondary" href="/auth/login">Admin-Login</a></div>
+    <p class="lead">Finde eine passende Schicht und melde dich unkompliziert als ehrenamtliche Person an.</p>
+    {% if events %}
+      <div class="row g-3 mt-1">
+      {% for event in events %}
+        <article class="col-12 col-md-6"><div class="card h-100"><div class="card-body">
+          <h2 class="h4">{{ event.name }}</h2><p>{{ event.short_description or event.description or "Wir freuen uns auf deine Unterstützung." }}</p>
+          <a class="btn btn-primary" href="/veranstaltungen/{{ event.slug }}">Schichten ansehen</a>
+        </div></div></article>
+      {% endfor %}
+      </div>
+    {% else %}
+      <p class="alert alert-info">Derzeit sind keine Anmeldungen geöffnet.</p>
+    {% endif %}
+  </section>
+{% endblock %}

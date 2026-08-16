@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% from "components/form_errors.html" import field_error, form_error_summary %}
+{% block content %}
+  <h1>Anmeldung bearbeiten: {{ event.name }}</h1>
+  {{ form_error_summary(error, field_errors, "registration-edit-errors") }}
+  <form method="post" class="needs-validation" novalidate>
+    <fieldset class="mb-4" id="shift-selection" tabindex="-1" data-required-group="shift_ids" data-required-message="Bitte wähle mindestens eine Schicht aus."{% if field_errors.get('shift_ids') %} aria-invalid="true" aria-describedby="shift_ids-error"{% endif %}><legend class="h3">Schichten auswählen</legend>
+      {% for shift in shifts %}<div class="form-check card p-3 mb-2"><input class="form-check-input" type="checkbox" name="shift_ids" value="{{ shift.id }}" id="shift-{{ shift.id }}" {% if shift.id in selected_shift_ids %}checked{% endif %}><label class="form-check-label ms-2" for="shift-{{ shift.id }}"><strong>{{ shift.title }}</strong><br>{{ shift.starts_at.strftime('%d.%m.%Y %H:%M') }}–{{ shift.ends_at.strftime('%H:%M') }} Uhr</label></div>{% endfor %}
+      {{ field_error("shift_ids", field_errors) }}
+    </fieldset>
+    <fieldset class="mb-4"><legend class="h3">Deine Daten</legend><div class="row g-3">
+      <div class="col-md-6"><label class="form-label" for="first_name">Vorname</label><input class="form-control{% if field_errors.get('first_name') %} is-invalid{% endif %}" required id="first_name" name="first_name" value="{{ form_values.get('first_name', volunteer.first_name) }}"{% if field_errors.get('first_name') %} aria-invalid="true" aria-describedby="first_name-error"{% endif %}>{{ field_error("first_name", field_errors) }}</div>
+      <div class="col-md-6"><label class="form-label" for="last_name">Nachname</label><input class="form-control{% if field_errors.get('last_name') %} is-invalid{% endif %}" required id="last_name" name="last_name" value="{{ form_values.get('last_name', volunteer.last_name) }}"{% if field_errors.get('last_name') %} aria-invalid="true" aria-describedby="last_name-error"{% endif %}>{{ field_error("last_name", field_errors) }}</div>
+      <div class="col-md-6"><label class="form-label" for="email">E-Mail-Adresse</label><input class="form-control{% if field_errors.get('email') %} is-invalid{% endif %}" required type="email" id="email" name="email" value="{{ form_values.get('email', volunteer.email) }}"{% if field_errors.get('email') %} aria-invalid="true" aria-describedby="email-error"{% endif %}>{{ field_error("email", field_errors) }}</div>
+      <div class="col-md-6"><label class="form-label" for="birth_date">Geburtsdatum</label><input class="form-control{% if field_errors.get('birth_date') %} is-invalid{% endif %}" required type="date" id="birth_date" name="birth_date" value="{{ form_values.get('birth_date', volunteer.birth_date.isoformat() if volunteer.birth_date else '') }}"{% if field_errors.get('birth_date') %} aria-invalid="true" aria-describedby="birth_date-error"{% endif %}>{{ field_error("birth_date", field_errors) }}</div>
+      <div class="col-md-6"><label class="form-label" for="phone">Telefonnummer</label><input class="form-control" id="phone" name="phone" value="{{ form_values.get('phone', volunteer.phone or '') }}"></div>
+      <div class="col-md-6"><label class="form-label" for="pronouns">Pronomen</label><input class="form-control" id="pronouns" name="pronouns" value="{{ form_values.get('pronouns', volunteer.pronouns or '') }}"></div>
+    </div></fieldset>
+    <div class="form-check mb-2"><input class="form-check-input{% if field_errors.get('contact_consent') %} is-invalid{% endif %}" required type="checkbox" id="contact_consent" name="contact_consent" value="true" {% if form_values.get('contact_consent', volunteer.contact_consent) %}checked{% endif %}{% if field_errors.get('contact_consent') %} aria-invalid="true" aria-describedby="contact_consent-error"{% endif %}><label class="form-check-label" for="contact_consent">Ich stimme der Kontaktaufnahme für diese Veranstaltung zu.</label></div>
+    {{ field_error("contact_consent", field_errors) }}
+    <div class="form-check mb-4"><input class="form-check-input" type="checkbox" id="future_contact_consent" name="future_contact_consent" value="true" {% if form_values.get('future_contact_consent', volunteer.future_contact_consent) %}checked{% endif %}><label class="form-check-label" for="future_contact_consent">ST. PRIDE darf mich künftig über weitere Ehrenamtsmöglichkeiten informieren.</label></div>
+    <button class="btn btn-primary btn-lg" type="submit">Änderungen speichern</button>
+    <a class="btn btn-outline-secondary btn-lg" href="/anmeldung/{{ token }}/bestaetigung">Abbrechen</a>
+  </form>
+{% endblock %}

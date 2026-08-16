@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Test email{% endblock %}
+{% block content %}
+  <p>This is an administrative test email.</p>
+  <dl>
+    <dt>Environment</dt><dd>{{ environment }}</dd>
+    <dt>Timestamp</dt><dd>{{ timestamp }}</dd>
+  </dl>
+{% endblock %}

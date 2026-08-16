@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% from "components/error_actions.html" import error_actions %}
+{% block content %}
+  <section class="text-center py-5">
+    <h1>Anmeldung erforderlich</h1>
+    <p class="lead">Bitte melde dich an, um auf diesen Bereich zuzugreifen.</p>
+    <div class="d-flex flex-wrap justify-content-center gap-2 mb-2">
+      <a class="btn btn-success" href="/auth/login">Anmelden</a>
+    </div>
+    {{ error_actions() }}
+  </section>
+{% endblock %}

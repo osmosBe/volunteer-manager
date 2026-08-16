@@ -1,0 +1,88 @@
+# Architecture decisions
+
+## Authentication is provider-neutral
+
+The application supports Azure Container Apps EasyAuth and standards-based
+OpenID Connect behind one authentication-provider boundary. Every provider
+produces the same `AuthenticatedUser`; routes and database-backed permission
+checks do not contain provider-specific role logic. EasyAuth remains the Azure
+deployment boundary, while generic OIDC enables self-hosted installations.
+`AUTH_MODE=disabled` exists only for isolated local development and CI and must
+not be exposed to an untrusted network.
+
+Generic OIDC sessions are server-side but currently process-local. OIDC
+deployments therefore run one application replica until a shared session store
+is introduced.
+
+## PostgreSQL is the shared Azure database
+
+Azure deployments use PostgreSQL Flexible Server through `DATABASE_URL` and
+psycopg 3. SQLite remains a lightweight option for local development and small
+single-replica self-hosted installations. SQLite must use local storage; Azure
+Files and other network filesystems are not supported database transports.
+Existing file shares are retained for possible future exports/uploads and are
+not deleted automatically.
+
+Alembic is the production schema authority. The web image starts deterministically
+without migrating or seeding. A manual Container Apps Job runs the same image and
+must finish `alembic upgrade head` before deployment health verification.
+
+Password authentication with TLS is the first PostgreSQL milestone. Web and job
+resources already have managed identities so Entra database authentication can
+replace the password later without redesigning the application boundary.
+
+## Public editing uses random bearer-style tokens
+
+Public registrations receive a cryptographically random edit token. Only its
+SHA-256 hash is stored. The token can be revoked and possession is required to
+read or change the registration. Looking up an e-mail address never exposes a
+different person's data.
+
+## Messages use a persistent outbox
+
+Application workflows create messages in the outbox according to administrable
+mail templates and delivery modes. SMTP delivery is explicit and failure-tolerant;
+the SMTP password remains an environment/Azure secret rather than database data.
+
+New transactional delivery code uses the provider-neutral `MailService` boundary
+with `console` and Microsoft Graph providers. Graph uses app-only authentication
+and the configured shared mailbox; business routes must never call Graph
+directly. The existing SMTP/outbox workflow remains isolated until a later
+workflow migration, and this foundation deliberately adds no queue worker.
+
+For Microsoft 365, Exchange Online Application RBAC is the authorization source
+of truth. A scoped `Application Mail.Send` role replaces—not supplements—an
+unscoped Entra `Mail.Send` grant, because permissions from both authorities are
+additive. Client secrets are supported initially; managed identity is the future
+credential model behind the existing token-provider boundary.
+
+## Historical assignments are retained
+
+Assignments are status-driven instead of hard-deleted. Anonymization removes
+personal data and edit access irreversibly while preserving staffing history.
+Relevant administrative changes are recorded in the audit log.
+
+## Branding assets are portable database state
+
+The bundled logo remains the immutable fallback inside the application image.
+An administrator can configure a render-only HTTP(S) URL or upload a small,
+validated logo. Uploaded bytes live in the application database rather than the
+container filesystem so the same feature survives revisions and works with
+SQLite, PostgreSQL, Docker Compose, Azure Container Apps and Kubernetes without
+a second storage dependency. The 2 MB limit keeps this singleton BLOB
+operationally modest.
+
+The server does not proxy or cache remote URLs because that would introduce an
+SSRF-capable fetcher. Browsers load and cache the remote asset and fall back to
+the bundled logo on failure. Raster uploads are re-encoded; SVG is accepted only
+after strict active-content and external-resource validation.
+
+## Open points for the next phase
+
+- Replace PostgreSQL password authentication with managed identity/Entra auth
+  after operational validation.
+- Replace the process-local OIDC session store before horizontal scaling.
+- Insert the persistent outbox between business workflows and `MailService`.
+- Add finer-grained Entra groups and automated data retention.
+- Add dedicated CSRF tokens if the app is exposed without the Easy Auth
+  same-site authentication boundary.

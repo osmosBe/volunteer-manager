@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% from "components/form_errors.html" import form_error_summary %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center gap-3 mb-3">
+  <div>
+    <h1 class="mb-1">Branding</h1>
+    <p class="text-muted mb-0">Das Logo wird ohne Container-Neubau aus der Datenbankkonfiguration geladen.</p>
+  </div>
+  <a class="btn btn-outline-secondary" href="/admin">Zurück</a>
+</div>
+
+{{ form_error_summary(error, None, "branding-errors") }}
+
+<section class="card mb-4">
+  <div class="card-body">
+    <h2 class="h4">Aktuelles Logo</h2>
+    <div class="bg-white border rounded p-3 mb-3" style="min-height: 120px;">
+      <img src="/branding/logo" alt="Aktuelles Anwendungslogo" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='{{ default_logo_url }}';" style="display:block;max-height:120px;max-width:100%;width:auto;height:auto;">
+    </div>
+    <p class="mb-0">
+      Quelle:
+      {% if branding_source == "url" %}<strong>Logo-URL</strong>
+      {% elif branding_source == "upload" %}<strong>Upload{% if branding.logo_filename %} · {{ branding.logo_filename }}{% endif %}</strong>
+      {% else %}<strong>Mitgeliefertes Standardlogo</strong>{% endif %}
+    </p>
+  </div>
+</section>
+
+<div class="row g-4">
+  <div class="col-lg-6">
+    <section class="card h-100">
+      <div class="card-body">
+        <h2 class="h4">Logo-URL</h2>
+        <p class="text-muted">Die Anwendung lädt die URL im Browser und fällt bei einem Ladefehler automatisch auf das Standardlogo zurück. Der Server ruft die URL aus SSRF-Schutzgründen nicht selbst ab.</p>
+        <form method="post" action="/admin/branding/url">
+          <label class="form-label" for="logo_url">Öffentliche HTTP(S)-URL</label>
+          <input class="form-control mb-3" id="logo_url" name="logo_url" type="url" maxlength="2048" required placeholder="https://cdn.example.org/logo.png" value="{{ logo_url_value or '' }}">
+          <button class="btn btn-primary" type="submit">Logo-URL übernehmen</button>
+        </form>
+      </div>
+    </section>
+  </div>
+  <div class="col-lg-6">
+    <section class="card h-100">
+      <div class="card-body">
+        <h2 class="h4">Logo hochladen</h2>
+        <p class="text-muted">PNG, JPEG oder geprüftes SVG; maximal {{ max_logo_megabytes }} MB. Rasterbilder werden auf maximal 1600 × 800 Pixel verkleinert und ohne Metadaten neu gespeichert.</p>
+        <form method="post" action="/admin/branding/upload" enctype="multipart/form-data">
+          <label class="form-label" for="logo_file">Logo-Datei</label>
+          <input class="form-control mb-3" id="logo_file" name="logo_file" type="file" accept="image/png,image/jpeg,image/svg+xml,.png,.jpg,.jpeg,.svg" data-max-file-size="2097152" required>
+          <button class="btn btn-primary" type="submit">Logo hochladen</button>
+        </form>
+      </div>
+    </section>
+  </div>
+</div>
+
+<section class="card border-danger mt-4">
+  <div class="card-body">
+    <h2 class="h4">Auf Standard zurücksetzen</h2>
+    <p>Entfernt die konfigurierte URL oder den Upload und aktiviert wieder das mitgelieferte Logo.</p>
+    <form method="post" action="/admin/branding/reset">
+      <button class="btn btn-outline-danger" type="submit">Standardlogo wiederherstellen</button>
+    </form>
+  </div>
+</section>
+{% endblock %}
