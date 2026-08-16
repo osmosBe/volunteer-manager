@@ -42,8 +42,10 @@ def test_admin_can_create_plan_edit_and_duplicate_event(tmp_path):
             data={
                 "name": "Planungstest",
                 "slug": "planungstest",
-                "starts_at": start.isoformat(),
-                "ends_at": (start + timedelta(hours=8)).isoformat(),
+                "start_date": start.date().isoformat(),
+                "start_time": start.strftime("%H:%M"),
+                "end_date": (start + timedelta(hours=8)).date().isoformat(),
+                "end_time": (start + timedelta(hours=8)).strftime("%H:%M"),
                 "status": "registration_open",
                 "is_public": "true",
                 "short_description": "Kurz und klar",
@@ -210,8 +212,128 @@ def test_admin_can_create_plan_edit_and_duplicate_event(tmp_path):
             )
             assert db.get(Event, event_id).contact_email == "kontakt@example.org"
             assert db.get(Event, event_id).allows_minors is True
+            assert db.get(Event, event_id).start_time_is_set is True
+            assert db.get(Event, event_id).end_time_is_set is True
             assert db.get(Shift, shift_id).title == "Info Früh aktualisiert"
             assert db.get(Shift, shift_id).needed_count == 4
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_event_dates_are_required_while_times_are_optional(tmp_path):
+    engine = create_database_engine(f"sqlite:///{tmp_path / 'event-times.db'}")
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+
+    def override_get_db():
+        with Session() as db:
+            yield db
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        client = TestClient(app)
+        created = client.post(
+            "/admin/veranstaltungen/neu",
+            data={
+                "name": "Ganztägige Veranstaltung",
+                "slug": "ganztag",
+                "start_date": "2030-05-10",
+                "start_time": "",
+                "end_date": "2030-05-11",
+                "end_time": "",
+                "status": "registration_open",
+                "is_public": "true",
+            },
+            follow_redirects=False,
+        )
+        assert created.status_code == 303
+        event_id = int(created.headers["location"].rsplit("/", 1)[1])
+
+        edit_page = client.get(f"/admin/veranstaltungen/{event_id}/bearbeiten")
+        public_page = client.get("/veranstaltungen/ganztag")
+        assert edit_page.status_code == 200
+        assert 'name="start_date" value="2030-05-10"' in edit_page.text
+        assert 'name="start_time" value=""' in edit_page.text
+        assert 'name="end_date" value="2030-05-11"' in edit_page.text
+        assert 'name="end_time" value=""' in edit_page.text
+        assert public_page.status_code == 200
+        assert "10.05.2030" in public_page.text
+        assert "11.05.2030" in public_page.text
+        assert "00:00" not in public_page.text
+        assert "23:59" not in public_page.text
+
+        with Session() as db:
+            event = db.get(Event, event_id)
+            assert event.starts_at == datetime(2030, 5, 10, 0, 0)
+            assert event.ends_at == datetime(2030, 5, 11, 23, 59, 59, 999999)
+            assert event.start_time_is_set is False
+            assert event.end_time_is_set is False
+
+        updated = client.post(
+            f"/admin/veranstaltungen/{event_id}/bearbeiten",
+            data={
+                "name": "Ganztägige Veranstaltung",
+                "slug": "ganztag",
+                "start_date": "2030-05-10",
+                "start_time": "09:30",
+                "end_date": "2030-05-11",
+                "end_time": "",
+                "status": "registration_open",
+                "is_public": "true",
+            },
+            follow_redirects=False,
+        )
+        assert updated.status_code == 303
+        with Session() as db:
+            event = db.get(Event, event_id)
+            assert event.starts_at == datetime(2030, 5, 10, 9, 30)
+            assert event.start_time_is_set is True
+            assert event.end_time_is_set is False
+
+        missing_date = client.post(
+            "/admin/veranstaltungen/neu",
+            data={
+                "name": "Fehlendes Datum",
+                "slug": "fehlendes-datum",
+                "start_date": "2030-05-10",
+                "start_time": "08:00",
+                "end_date": "",
+                "end_time": "17:00",
+            },
+        )
+        assert missing_date.status_code == 422
+        assert 'data-error-for="end_date"' in missing_date.text
+        assert "Bitte gib ein Enddatum ein." in missing_date.text
+        assert 'name="start_time" value="08:00"' in missing_date.text
+
+        invalid_order = client.post(
+            "/admin/veranstaltungen/neu",
+            data={
+                "name": "Ungültige Zeit",
+                "slug": "ungueltige-zeit",
+                "start_date": "2030-05-10",
+                "start_time": "12:00",
+                "end_date": "2030-05-10",
+                "end_time": "11:00",
+            },
+        )
+        assert invalid_order.status_code == 422
+        assert "Das Ende muss nach dem Beginn liegen." in invalid_order.text
+        assert 'data-error-for="end_date"' in invalid_order.text
+
+        single_day = client.post(
+            "/admin/veranstaltungen/neu",
+            data={
+                "name": "Eintägige Veranstaltung",
+                "slug": "eintag",
+                "start_date": "2030-06-01",
+                "start_time": "",
+                "end_date": "2030-06-01",
+                "end_time": "",
+            },
+            follow_redirects=False,
+        )
+        assert single_day.status_code == 303
     finally:
         app.dependency_overrides.clear()
 

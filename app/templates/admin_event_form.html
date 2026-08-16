@@ -22,13 +22,25 @@
     <label class="form-label" for="description">Öffentliche Beschreibung</label>
     <textarea class="form-control" rows="6" id="description" name="description">{{ form_values.description }}</textarea>
   </div>
-  <div class="col-md-6">
-    <label class="form-label" for="starts_at">Beginn</label>
-    <input class="form-control" type="datetime-local" id="starts_at" name="starts_at" value="{{ form_values.starts_at }}">
+  <div class="col-md-4">
+    <label class="form-label" for="start_date">Startdatum</label>
+    <input class="form-control{% if field_errors.get('start_date') %} is-invalid{% endif %}" required type="date" id="start_date" name="start_date" value="{{ form_values.start_date }}"{% if field_errors.get('start_date') %} aria-invalid="true" aria-describedby="start_date-error"{% endif %}>
+    {{ field_error("start_date", field_errors) }}
   </div>
-  <div class="col-md-6">
-    <label class="form-label" for="ends_at">Ende</label>
-    <input class="form-control" type="datetime-local" id="ends_at" name="ends_at" value="{{ form_values.ends_at }}" data-after="starts_at" data-after-message="Das Ende muss nach dem Beginn liegen.">
+  <div class="col-md-2">
+    <label class="form-label" for="start_time">Startzeit</label>
+    <input class="form-control{% if field_errors.get('start_time') %} is-invalid{% endif %}" type="time" id="start_time" name="start_time" value="{{ form_values.start_time }}"{% if field_errors.get('start_time') %} aria-invalid="true" aria-describedby="start_time-error"{% endif %}>
+    {{ field_error("start_time", field_errors) }}
+  </div>
+  <div class="col-md-4">
+    <label class="form-label" for="end_date">Enddatum</label>
+    <input class="form-control{% if field_errors.get('end_date') %} is-invalid{% endif %}" required type="date" id="end_date" name="end_date" value="{{ form_values.end_date }}" data-range-start-date="start_date" data-range-start-time="start_time" data-range-end-time="end_time" data-range-message="Das Ende muss nach dem Beginn liegen."{% if field_errors.get('end_date') %} aria-invalid="true" aria-describedby="end_date-error"{% endif %}>
+    {{ field_error("end_date", field_errors) }}
+  </div>
+  <div class="col-md-2">
+    <label class="form-label" for="end_time">Endzeit</label>
+    <input class="form-control{% if field_errors.get('end_time') %} is-invalid{% endif %}" type="time" id="end_time" name="end_time" value="{{ form_values.end_time }}"{% if field_errors.get('end_time') %} aria-invalid="true" aria-describedby="end_time-error"{% endif %}>
+    {{ field_error("end_time", field_errors) }}
   </div>
   <div class="col-md-6">
     <label class="form-label" for="venue">Ort</label>

@@ -24,6 +24,8 @@ def test_shared_form_validation_asset_has_accessible_error_behavior():
     assert "dataset.fieldRequirement" in source
     assert "document.querySelectorAll('form:not([data-validation=\"off\"])')" in source
     assert "control.dataset.after" in source
+    assert "control.dataset.rangeStartDate" in source
+    assert 'endTime?.value || "23:59:59.999"' in source
 
 
 def test_error_pages_offer_history_back_with_home_fallback():
@@ -65,6 +67,8 @@ def test_event_form_keeps_values_and_shows_server_errors_in_form(tmp_path):
             data={
                 "name": "Neuer Titel",
                 "slug": "bestehend",
+                "start_date": "2030-05-10",
+                "end_date": "2030-05-11",
                 "contact_name": "Kontakt bleibt erhalten",
             },
         )
@@ -76,6 +80,8 @@ def test_event_form_keeps_values_and_shows_server_errors_in_form(tmp_path):
     assert "data-form-error-summary" in missing.text
     assert 'data-error-for="name"' in missing.text
     assert 'data-error-for="slug"' in missing.text
+    assert 'data-error-for="start_date"' in missing.text
+    assert 'data-error-for="end_date"' in missing.text
     assert 'value="Bleibt erhalten"' in missing.text
     assert duplicate.status_code == 422
     assert "Dieses URL-Kürzel wird bereits verwendet." in duplicate.text
@@ -83,5 +89,7 @@ def test_event_form_keeps_values_and_shows_server_errors_in_form(tmp_path):
     assert 'value="Kontakt bleibt erhalten"' in duplicate.text
     assert page.status_code == 200
     assert 'name="name"' in page.text and "required" in page.text
-    assert 'data-after="starts_at"' in page.text
+    assert 'name="start_date"' in page.text and "required" in page.text
+    assert 'name="start_time"' in page.text
+    assert 'data-range-start-date="start_date"' in page.text
     assert 'data-after="registration_opens_at"' in page.text

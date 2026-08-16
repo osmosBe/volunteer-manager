@@ -112,6 +112,8 @@ def ensure_demo_data(db: Session) -> Event:
     )
     event.starts_at = event_start
     event.ends_at = event_end
+    event.start_time_is_set = True
+    event.end_time_is_set = True
     event.venue = "Demo-Platz St. Pölten"
     event.address = "Demostraße 1, 3100 St. Pölten"
     event.public_meeting_point = "ST.-PRIDE-Demo-Infostand"

@@ -1,7 +1,7 @@
 import csv
 import logging
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import date, datetime, time
 from io import StringIO
 from typing import Annotated
 
@@ -38,7 +38,9 @@ from app.database.session import database_status, get_db
 from app.forms.query_filters import (
     QueryFilterError,
     parse_checkbox,
+    parse_optional_date,
     parse_optional_id,
+    parse_optional_time,
 )
 from app.models import (
     AgeGroup,
@@ -278,8 +280,10 @@ def admin_dashboard(
 _EVENT_FORM_FIELDS = (
     "name",
     "slug",
-    "starts_at",
-    "ends_at",
+    "start_date",
+    "start_time",
+    "end_date",
+    "end_time",
     "venue",
     "address",
     "short_description",
@@ -311,6 +315,10 @@ def _event_form_values(**values) -> dict[str, object]:
         value = values[field]
         if isinstance(value, datetime):
             value = value.strftime("%Y-%m-%dT%H:%M")
+        elif isinstance(value, date):
+            value = value.isoformat()
+        elif isinstance(value, time):
+            value = value.strftime("%H:%M")
         elif isinstance(value, EventStatus):
             value = value.value
         result[field] = value if value is not None else ""
@@ -320,11 +328,93 @@ def _event_form_values(**values) -> dict[str, object]:
 def _event_model_form_values(event: Event | None) -> dict[str, object]:
     if event is None:
         return _event_form_values()
-    return _event_form_values(
-        **{
-            field: (event.status if field == "status" else getattr(event, field))
-            for field in _EVENT_FORM_FIELDS
+    values = {
+        field: (event.status if field == "status" else getattr(event, field))
+        for field in _EVENT_FORM_FIELDS
+        if field not in {"start_date", "start_time", "end_date", "end_time"}
+    }
+    values.update(
+        {
+            "start_date": event.starts_at.date() if event.starts_at else None,
+            "start_time": (
+                event.starts_at.time()
+                if event.starts_at and event.start_time_is_set
+                else None
+            ),
+            "end_date": event.ends_at.date() if event.ends_at else None,
+            "end_time": (
+                event.ends_at.time()
+                if event.ends_at and event.end_time_is_set
+                else None
+            ),
         }
+    )
+    return _event_form_values(**values)
+
+
+def _parse_event_schedule(
+    *,
+    start_date_value: str,
+    start_time_value: str,
+    end_date_value: str,
+    end_time_value: str,
+) -> tuple[datetime | None, datetime | None, bool, bool, dict[str, str]]:
+    """Build sortable event bounds while retaining optional-time semantics."""
+
+    field_errors: dict[str, str] = {}
+    parsed: dict[str, date | time | None] = {}
+    parsers = (
+        (
+            "start_date",
+            parse_optional_date,
+            start_date_value,
+            "Das Startdatum",
+        ),
+        (
+            "start_time",
+            parse_optional_time,
+            start_time_value,
+            "Die Startzeit",
+        ),
+        ("end_date", parse_optional_date, end_date_value, "Das Enddatum"),
+        ("end_time", parse_optional_time, end_time_value, "Die Endzeit"),
+    )
+    for field_name, parser, value, label in parsers:
+        try:
+            parsed[field_name] = parser(value, field_name=field_name, label=label)
+        except QueryFilterError as exc:
+            parsed[field_name] = None
+            field_errors[field_name] = str(exc)
+
+    if not start_date_value.strip() and "start_date" not in field_errors:
+        field_errors["start_date"] = "Bitte gib ein Startdatum ein."
+    if not end_date_value.strip() and "end_date" not in field_errors:
+        field_errors["end_date"] = "Bitte gib ein Enddatum ein."
+    if field_errors:
+        return None, None, False, False, field_errors
+
+    parsed_start_date = parsed["start_date"]
+    parsed_end_date = parsed["end_date"]
+    assert isinstance(parsed_start_date, date)
+    assert isinstance(parsed_end_date, date)
+    parsed_start_time = parsed["start_time"]
+    parsed_end_time = parsed["end_time"]
+    starts_at = datetime.combine(
+        parsed_start_date,
+        parsed_start_time if isinstance(parsed_start_time, time) else time.min,
+    )
+    ends_at = datetime.combine(
+        parsed_end_date,
+        parsed_end_time if isinstance(parsed_end_time, time) else time.max,
+    )
+    if ends_at <= starts_at:
+        field_errors["end_date"] = "Das Ende muss nach dem Beginn liegen."
+    return (
+        starts_at,
+        ends_at,
+        bool(start_time_value.strip()),
+        bool(end_time_value.strip()),
+        field_errors,
     )
 
 
@@ -362,8 +452,10 @@ def create_event(
     db: Session = db_dependency,
     name: Annotated[str, Form()] = "",
     slug: Annotated[str, Form()] = "",
-    starts_at: Annotated[datetime | None, Form()] = None,
-    ends_at: Annotated[datetime | None, Form()] = None,
+    start_date: Annotated[str, Form()] = "",
+    start_time: Annotated[str, Form()] = "",
+    end_date: Annotated[str, Form()] = "",
+    end_time: Annotated[str, Form()] = "",
     venue: Annotated[str, Form()] = "",
     address: Annotated[str, Form()] = "",
     short_description: Annotated[str, Form()] = "",
@@ -385,8 +477,10 @@ def create_event(
     form_values = _event_form_values(
         name=name,
         slug=slug,
-        starts_at=starts_at,
-        ends_at=ends_at,
+        start_date=start_date,
+        start_time=start_time,
+        end_date=end_date,
+        end_time=end_time,
         venue=venue,
         address=address,
         short_description=short_description,
@@ -405,7 +499,14 @@ def create_event(
         status=status_value,
         is_public=is_public,
     )
-    field_errors = {}
+    starts_at, ends_at, start_time_is_set, end_time_is_set, field_errors = (
+        _parse_event_schedule(
+            start_date_value=start_date,
+            start_time_value=start_time,
+            end_date_value=end_date,
+            end_time_value=end_time,
+        )
+    )
     if not name.strip():
         field_errors["name"] = "Bitte gib einen Titel ein."
     if not slug.strip():
@@ -415,14 +516,6 @@ def create_event(
             request,
             None,
             field_errors=field_errors,
-            form_values=form_values,
-            status_code=422,
-        )
-    if ends_at and starts_at and ends_at <= starts_at:
-        return _render_event_form(
-            request,
-            None,
-            error="Das Ende muss nach dem Beginn liegen.",
             form_values=form_values,
             status_code=422,
         )
@@ -473,6 +566,8 @@ def create_event(
         slug=slug.strip(),
         starts_at=starts_at,
         ends_at=ends_at,
+        start_time_is_set=start_time_is_set,
+        end_time_is_set=end_time_is_set,
         venue=venue.strip() or None,
         address=address.strip() or None,
         short_description=short_description.strip() or None,
@@ -545,8 +640,10 @@ def edit_event_submit(
     admin_user=admin_dependency,
     name: Annotated[str, Form()] = "",
     slug: Annotated[str, Form()] = "",
-    starts_at: Annotated[datetime | None, Form()] = None,
-    ends_at: Annotated[datetime | None, Form()] = None,
+    start_date: Annotated[str, Form()] = "",
+    start_time: Annotated[str, Form()] = "",
+    end_date: Annotated[str, Form()] = "",
+    end_time: Annotated[str, Form()] = "",
     venue: Annotated[str, Form()] = "",
     address: Annotated[str, Form()] = "",
     short_description: Annotated[str, Form()] = "",
@@ -571,8 +668,10 @@ def edit_event_submit(
     form_values = _event_form_values(
         name=name,
         slug=slug,
-        starts_at=starts_at,
-        ends_at=ends_at,
+        start_date=start_date,
+        start_time=start_time,
+        end_date=end_date,
+        end_time=end_time,
         venue=venue,
         address=address,
         short_description=short_description,
@@ -591,15 +690,20 @@ def edit_event_submit(
         status=status_value,
         is_public=is_public,
     )
+    starts_at, ends_at, start_time_is_set, end_time_is_set, field_errors = (
+        _parse_event_schedule(
+            start_date_value=start_date,
+            start_time_value=start_time,
+            end_date_value=end_date,
+            end_time_value=end_time,
+        )
+    )
     error = None
-    field_errors = {}
     if not name.strip():
         field_errors["name"] = "Bitte gib einen Titel ein."
     if not slug.strip():
         field_errors["slug"] = "Bitte gib ein URL-Kürzel ein."
-    if starts_at and ends_at and ends_at <= starts_at:
-        error = "Das Ende muss nach dem Beginn liegen."
-    elif (
+    if (
         registration_opens_at
         and registration_closes_at
         and registration_closes_at <= registration_opens_at
@@ -633,6 +737,8 @@ def edit_event_submit(
     event.slug = slug.strip()
     event.starts_at = starts_at
     event.ends_at = ends_at
+    event.start_time_is_set = start_time_is_set
+    event.end_time_is_set = end_time_is_set
     event.venue = venue.strip() or None
     event.address = address.strip() or None
     event.short_description = short_description.strip() or None
@@ -680,6 +786,8 @@ def duplicate_event(
         description=source.description,
         starts_at=source.starts_at,
         ends_at=source.ends_at,
+        start_time_is_set=source.start_time_is_set,
+        end_time_is_set=source.end_time_is_set,
         venue=source.venue,
         address=source.address,
         public_meeting_point=source.public_meeting_point,

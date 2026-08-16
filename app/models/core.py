@@ -147,6 +147,10 @@ class Event(TimestampMixin, Base):
     description: Mapped[str | None] = mapped_column(Text)
     starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    start_time_is_set: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=False
+    )
+    end_time_is_set: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     timezone: Mapped[str] = mapped_column(
         String(80), default="Europe/Vienna", nullable=False
     )
