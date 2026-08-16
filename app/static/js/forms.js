@@ -13,12 +13,75 @@
       ? document.querySelector(`label[for="${CSS.escape(control.id)}"]`)
       : null;
     const label = explicit || control.closest("label");
-    return (label?.childNodes[0]?.textContent || label?.textContent || control.name || "Dieses Feld")
+    return (label?.childNodes[0]?.textContent
+      || label?.textContent
+      || control.getAttribute("aria-label")
+      || control.placeholder
+      || control.title
+      || control.name
+      || "Dieses Feld")
       .trim()
       .replace(/\s+/g, " ");
   };
 
+  const requirementText = (required) => required ? "Pflichtfeld" : "optional";
+
+  const appendRequirement = (target, required) => {
+    if (!target || target.querySelector(":scope > [data-field-requirement]")) return;
+    const marker = document.createElement("span");
+    marker.className = required ? "text-danger small" : "text-muted small";
+    marker.dataset.fieldRequirement = required ? "required" : "optional";
+    marker.textContent = ` (${requirementText(required)})`;
+    target.appendChild(marker);
+  };
+
+  const decorateRequirements = (form) => {
+    const groupedNames = new Set();
+    for (const group of form.querySelectorAll("[data-required-group]")) {
+      const name = group.dataset.requiredGroup;
+      if (name) groupedNames.add(name);
+      appendRequirement(group.querySelector("legend"), true);
+    }
+    const radioNames = new Set();
+    for (const control of visibleControls(form)) {
+      if (!control.name || control.disabled || control.dataset.fieldIndicator === "off") continue;
+      if (groupedNames.has(control.name)) continue;
+      if (control.type === "radio") {
+        if (radioNames.has(control.name)) continue;
+        radioNames.add(control.name);
+        const legend = control.closest("fieldset")?.querySelector("legend");
+        if (legend) {
+          appendRequirement(legend, control.required);
+          continue;
+        }
+      }
+      const explicit = control.id
+        ? form.querySelector(`label[for="${CSS.escape(control.id)}"]`)
+        : null;
+      const label = explicit || control.closest("label");
+      if (label && !label.classList.contains("visually-hidden")) {
+        appendRequirement(label, control.required);
+        continue;
+      }
+      const marker = document.createElement("span");
+      marker.className = control.required
+        ? "form-text text-danger d-block"
+        : "form-text text-muted d-block";
+      marker.dataset.fieldRequirement = control.required ? "required" : "optional";
+      marker.textContent = requirementText(control.required);
+      const anchor = control.closest(".input-group") || control;
+      anchor.insertAdjacentElement("afterend", marker);
+    }
+  };
+
   const nativeMessage = (control) => {
+    const afterName = control.dataset.after;
+    if (afterName && control.value) {
+      const previous = control.form?.elements.namedItem(afterName);
+      if (previous?.value && control.value <= previous.value) {
+        return control.dataset.afterMessage || "Der spätere Zeitpunkt muss nach dem früheren liegen.";
+      }
+    }
     const validity = control.validity;
     const label = controlLabel(control);
     if (validity.valueMissing) return `Bitte fülle das Feld „${label}“ aus.`;
@@ -67,6 +130,7 @@
       this.form = form;
       this.touched = new Set();
       this.customValidators = new Map();
+      decorateRequirements(form);
       this.form.noValidate = true;
       this.summary = this.ensureSummary();
       this.bind();
@@ -302,7 +366,7 @@
   window.FormValidation = { enhance };
   document.addEventListener("DOMContentLoaded", () => {
     document.querySelectorAll('form:not([data-validation="off"])').forEach((form) => {
-      if ((form.method || "get").toLowerCase() === "post") enhance(form);
+      enhance(form);
     });
     const serverSummary = [...document.querySelectorAll("[data-form-error-summary]")]
       .find((summary) => summary.querySelector("[data-server-error]"));

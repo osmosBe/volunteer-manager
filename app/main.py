@@ -270,11 +270,84 @@ def admin_dashboard(
     )
 
 
+_EVENT_FORM_FIELDS = (
+    "name",
+    "slug",
+    "starts_at",
+    "ends_at",
+    "venue",
+    "address",
+    "short_description",
+    "description",
+    "public_meeting_point",
+    "registration_opens_at",
+    "registration_closes_at",
+    "contact_name",
+    "contact_email",
+    "contact_phone",
+    "briefing",
+    "clothing_and_material",
+    "catering_info",
+    "accessibility_info",
+    "allows_minors",
+    "status",
+    "is_public",
+)
+
+
+def _event_form_values(**values) -> dict[str, object]:
+    result: dict[str, object] = {field: "" for field in _EVENT_FORM_FIELDS}
+    result.update(
+        {"allows_minors": False, "status": EventStatus.draft.value, "is_public": False}
+    )
+    for field in _EVENT_FORM_FIELDS:
+        if field not in values:
+            continue
+        value = values[field]
+        if isinstance(value, datetime):
+            value = value.strftime("%Y-%m-%dT%H:%M")
+        elif isinstance(value, EventStatus):
+            value = value.value
+        result[field] = value if value is not None else ""
+    return result
+
+
+def _event_model_form_values(event: Event | None) -> dict[str, object]:
+    if event is None:
+        return _event_form_values()
+    return _event_form_values(
+        **{
+            field: (event.status if field == "status" else getattr(event, field))
+            for field in _EVENT_FORM_FIELDS
+        }
+    )
+
+
+def _render_event_form(
+    request: Request,
+    event: Event | None,
+    *,
+    error: str | None = None,
+    field_errors: dict[str, str] | None = None,
+    form_values: dict[str, object] | None = None,
+    status_code: int = 200,
+):
+    return templates.TemplateResponse(
+        "admin_event_form.html",
+        {
+            "request": request,
+            "event": event,
+            "error": error,
+            "field_errors": field_errors or {},
+            "form_values": form_values or _event_model_form_values(event),
+        },
+        status_code=status_code,
+    )
+
+
 @app.get("/admin/veranstaltungen/neu", tags=["admin"])
 def new_event_form(request: Request, admin_user=admin_dependency):
-    return templates.TemplateResponse(
-        "admin_event_form.html", {"request": request, "event": None, "error": None}
-    )
+    return _render_event_form(request, None)
 
 
 @app.post("/admin/veranstaltungen/neu", tags=["admin"])
@@ -304,24 +377,48 @@ def create_event(
     status_value: Annotated[str, Form(alias="status")] = EventStatus.draft.value,
     is_public: Annotated[bool, Form()] = False,
 ):
-    if not name.strip() or not slug.strip():
-        return templates.TemplateResponse(
-            "admin_event_form.html",
-            {
-                "request": request,
-                "event": None,
-                "error": "Titel und URL-Kürzel sind erforderlich.",
-            },
+    form_values = _event_form_values(
+        name=name,
+        slug=slug,
+        starts_at=starts_at,
+        ends_at=ends_at,
+        venue=venue,
+        address=address,
+        short_description=short_description,
+        description=description,
+        public_meeting_point=public_meeting_point,
+        registration_opens_at=registration_opens_at,
+        registration_closes_at=registration_closes_at,
+        contact_name=contact_name,
+        contact_email=contact_email,
+        contact_phone=contact_phone,
+        briefing=briefing,
+        clothing_and_material=clothing_and_material,
+        catering_info=catering_info,
+        accessibility_info=accessibility_info,
+        allows_minors=allows_minors,
+        status=status_value,
+        is_public=is_public,
+    )
+    field_errors = {}
+    if not name.strip():
+        field_errors["name"] = "Bitte gib einen Titel ein."
+    if not slug.strip():
+        field_errors["slug"] = "Bitte gib ein URL-Kürzel ein."
+    if field_errors:
+        return _render_event_form(
+            request,
+            None,
+            field_errors=field_errors,
+            form_values=form_values,
             status_code=422,
         )
     if ends_at and starts_at and ends_at <= starts_at:
-        return templates.TemplateResponse(
-            "admin_event_form.html",
-            {
-                "request": request,
-                "event": None,
-                "error": "Das Ende muss nach dem Beginn liegen.",
-            },
+        return _render_event_form(
+            request,
+            None,
+            error="Das Ende muss nach dem Beginn liegen.",
+            form_values=form_values,
             status_code=422,
         )
     if (
@@ -329,39 +426,41 @@ def create_event(
         and registration_closes_at
         and registration_closes_at <= registration_opens_at
     ):
-        return templates.TemplateResponse(
-            "admin_event_form.html",
-            {
-                "request": request,
-                "event": None,
-                "error": "Das Ende der Anmeldung muss nach deren Beginn liegen.",
-            },
+        return _render_event_form(
+            request,
+            None,
+            error="Das Ende der Anmeldung muss nach deren Beginn liegen.",
+            form_values=form_values,
             status_code=422,
         )
     if db.scalar(select(Event).where(Event.slug == slug.strip())):
-        return templates.TemplateResponse(
-            "admin_event_form.html",
-            {
-                "request": request,
-                "event": None,
-                "error": "Dieses URL-Kürzel wird bereits verwendet.",
-            },
+        return _render_event_form(
+            request,
+            None,
+            error="Dieses URL-Kürzel wird bereits verwendet.",
+            form_values=form_values,
             status_code=422,
         )
     try:
         event_status = EventStatus(status_value)
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=422, detail="Ungültiger Veranstaltungsstatus"
-        ) from exc
+    except ValueError:
+        return _render_event_form(
+            request,
+            None,
+            error="Ungültiger Veranstaltungsstatus.",
+            form_values=form_values,
+            status_code=422,
+        )
     normalized_contact_email = None
     if contact_email.strip():
         try:
             normalized_contact_email = validate_email_address(contact_email)
         except EmailAddressError as exc:
-            return templates.TemplateResponse(
-                "admin_event_form.html",
-                {"request": request, "event": None, "error": str(exc)},
+            return _render_event_form(
+                request,
+                None,
+                field_errors={"contact_email": str(exc)},
+                form_values=form_values,
                 status_code=422,
             )
     event = Event(
@@ -430,9 +529,7 @@ def edit_event_form(
     event = db.get(Event, event_id)
     if event is None:
         raise HTTPException(status_code=404)
-    return templates.TemplateResponse(
-        "admin_event_form.html", {"request": request, "event": event, "error": None}
-    )
+    return _render_event_form(request, event)
 
 
 @app.post("/admin/veranstaltungen/{event_id}/bearbeiten", tags=["admin"])
@@ -466,10 +563,36 @@ def edit_event_submit(
     event = db.get(Event, event_id)
     if event is None:
         raise HTTPException(status_code=404)
+    form_values = _event_form_values(
+        name=name,
+        slug=slug,
+        starts_at=starts_at,
+        ends_at=ends_at,
+        venue=venue,
+        address=address,
+        short_description=short_description,
+        description=description,
+        public_meeting_point=public_meeting_point,
+        registration_opens_at=registration_opens_at,
+        registration_closes_at=registration_closes_at,
+        contact_name=contact_name,
+        contact_email=contact_email,
+        contact_phone=contact_phone,
+        briefing=briefing,
+        clothing_and_material=clothing_and_material,
+        catering_info=catering_info,
+        accessibility_info=accessibility_info,
+        allows_minors=allows_minors,
+        status=status_value,
+        is_public=is_public,
+    )
     error = None
-    if not name.strip() or not slug.strip():
-        error = "Titel und URL-Kürzel sind erforderlich."
-    elif starts_at and ends_at and ends_at <= starts_at:
+    field_errors = {}
+    if not name.strip():
+        field_errors["name"] = "Bitte gib einen Titel ein."
+    if not slug.strip():
+        field_errors["slug"] = "Bitte gib ein URL-Kürzel ein."
+    if starts_at and ends_at and ends_at <= starts_at:
         error = "Das Ende muss nach dem Beginn liegen."
     elif (
         registration_opens_at
@@ -491,11 +614,14 @@ def edit_event_submit(
         try:
             normalized_contact_email = validate_email_address(contact_email)
         except EmailAddressError as exc:
-            error = str(exc)
-    if error:
-        return templates.TemplateResponse(
-            "admin_event_form.html",
-            {"request": request, "event": event, "error": error},
+            field_errors["contact_email"] = str(exc)
+    if error or field_errors:
+        return _render_event_form(
+            request,
+            event,
+            error=error,
+            field_errors=field_errors,
+            form_values=form_values,
             status_code=422,
         )
     event.name = name.strip()

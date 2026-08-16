@@ -1,11 +1,11 @@
 {% set team = assignment.shift.role.team if assignment.shift.role else none %}
 {% if team and team.materials %}
   <fieldset class="mb-3">
-    <legend class="h6">Material aus „{{ team.name }}“</legend>
+    <legend class="h6">Material aus „{{ team.name }}“ <span class="text-muted small" data-field-requirement="optional">(optional)</span></legend>
     <div class="d-flex flex-column gap-2">
       {% for material in team.materials if material.is_active %}
         <label class="border rounded p-2">
-          <input type="checkbox" name="material_ids" value="{{ material.id }}"
+          <input type="checkbox" name="material_ids" value="{{ material.id }}" data-field-indicator="off"
                  {% if material.quantity_available < 1 %}disabled{% endif %}>
           <strong>{{ material.name }}</strong>
           <span class="text-muted">· 1 {{ material.unit }}{% if material.is_consumable %} · Verbrauch{% else %} · Rückgabe erforderlich{% endif %}</span>

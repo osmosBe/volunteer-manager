@@ -1,1 +1,9 @@
-{% extends "base.html" %}{% block content %}<section class="text-center py-5"><h1>{{ title }}</h1><p class="lead">{{ message }}</p><a class="btn btn-primary" href="/">Zur Startseite</a></section>{% endblock %}
+{% extends "base.html" %}
+{% from "components/error_actions.html" import error_actions %}
+{% block content %}
+  <section class="text-center py-5">
+    <h1>{{ title }}</h1>
+    <p class="lead">{{ message }}</p>
+    {{ error_actions() }}
+  </section>
+{% endblock %}
