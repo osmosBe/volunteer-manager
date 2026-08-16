@@ -60,6 +60,8 @@ def test_admin_can_view_add_update_and_remove_mappings_with_audit(permission_app
     page = client.get("/admin/permissions", headers=headers)
     assert page.status_code == 200
     assert "Berechtigungen" in page.text
+    assert 'value.removeAttribute("pattern")' in page.text
+    assert 'value.pattern = type.value === "group"' not in page.text
 
     additions = [
         ("role", "Volunteer.SecondAdmin"),
