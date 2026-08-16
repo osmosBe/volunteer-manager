@@ -54,7 +54,7 @@ def test_landing_page_is_public(monkeypatch, tmp_path) -> None:
         app.dependency_overrides.clear()
 
     assert response.status_code == 200
-    assert "Gemeinsam machen wir PRIDE möglich" in response.text
+    assert "Gemeinsam machen wir Veranstaltungen möglich" in response.text
     assert 'href="/auth/login"' in response.text
     assert "Derzeit sind keine Anmeldungen geöffnet" in response.text
 
@@ -108,7 +108,7 @@ def test_admin_allows_access_when_auth_mode_disabled(monkeypatch, tmp_path) -> N
         app.dependency_overrides.clear()
 
     assert response.status_code == 200
-    assert "ST. PRIDE Volunteer Management – Admin Dashboard" in response.text
+    assert "Volunteer Manager – Admin Dashboard" in response.text
     assert "Local Developer" in response.text
     assert 'href="/admin/permissions"' in response.text
     assert 'href="/admin/db"' in response.text
@@ -207,7 +207,7 @@ def test_debug_db_returns_safe_schema_diagnostics(monkeypatch, tmp_path) -> None
         "database_reachable": True,
         "schema_initialized": False,
         "current_revision": None,
-        "expected_revision": "20260816_0013",
+        "expected_revision": "20260816_0014",
         "migration_pending": True,
         "tables": {"events": False, "volunteers": False, "shifts": False},
         "diagnostic_error": None,

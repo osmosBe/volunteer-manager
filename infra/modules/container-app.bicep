@@ -27,6 +27,9 @@ param databaseUrl string
 @description('Show the global demo-mode warning in the application UI.')
 param demoMode bool = false
 
+@description('Application name shown in page titles and administration views.')
+param appName string = 'Volunteer Manager'
+
 @description('Transactional mail provider.')
 param mailProvider string = 'console'
 
@@ -34,7 +37,7 @@ param mailProvider string = 'console'
 param mailFromAddress string = ''
 
 @description('Transactional mail sender display name.')
-param mailFromName string = 'ST. PRIDE Volunteer Manager'
+param mailFromName string = 'Volunteer Manager'
 
 @description('Optional transactional mail Reply-To address.')
 param mailReplyTo string = ''
@@ -119,6 +122,10 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'DEMO_MODE'
               value: string(demoMode)
+            }
+            {
+              name: 'APP_NAME'
+              value: appName
             }
             {
               name: 'MAIL_PROVIDER'

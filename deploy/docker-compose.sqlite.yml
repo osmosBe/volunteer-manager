@@ -5,6 +5,7 @@ services:
     ports:
       - "${APP_PORT:-8000}:8000"
     environment:
+      APP_NAME: "${APP_NAME:-Volunteer Manager}"
       DATABASE_URL: "sqlite:////data/volunteer.db"
       APP_BASE_URL: "${APP_BASE_URL:-http://localhost:8000}"
       AUTH_MODE: "${AUTH_MODE:-oidc}"
@@ -18,6 +19,7 @@ services:
       OIDC_GROUP_CLAIMS: "${OIDC_GROUP_CLAIMS:-groups}"
       MAIL_PROVIDER: "${MAIL_PROVIDER:-console}"
       MAIL_FROM_ADDRESS: "${MAIL_FROM_ADDRESS:-}"
+      MAIL_FROM_NAME: "${MAIL_FROM_NAME:-Volunteer Manager}"
     volumes:
       - volunteer-data:/data
     healthcheck:

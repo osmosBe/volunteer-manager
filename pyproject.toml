@@ -1,7 +1,7 @@
 [project]
-name = "st-pride-volunteer-management"
+name = "volunteer-manager"
 version = "0.1.0"
-description = "A lightweight volunteer management application scaffold for ST. PRIDE."
+description = "A portable volunteer and event management application."
 readme = "README.md"
 requires-python = ">=3.13"
 license = { text = "MIT" }

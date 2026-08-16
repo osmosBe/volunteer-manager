@@ -133,10 +133,12 @@ app.add_middleware(
 
 
 @app.middleware("http")
-async def expose_runtime_mode(request: Request, call_next):
+async def expose_runtime_presentation(request: Request, call_next):
     """Expose safe runtime presentation state to every HTML template."""
 
-    request.state.demo_mode = get_settings().demo_mode
+    settings = get_settings()
+    request.state.app_name = settings.app_name
+    request.state.demo_mode = settings.demo_mode
     return await call_next(request)
 
 
@@ -2019,7 +2021,7 @@ def smtp_configuration_submit(
     port: Annotated[int, Form()] = 587,
     username: Annotated[str, Form()] = "",
     from_email: Annotated[str, Form()] = "",
-    from_name: Annotated[str, Form()] = "ST. PRIDE Volunteer Management",
+    from_name: Annotated[str, Form()] = "Volunteer Manager",
     use_starttls: Annotated[bool, Form()] = False,
     use_ssl: Annotated[bool, Form()] = False,
     enabled: Annotated[bool, Form()] = False,
@@ -2057,7 +2059,7 @@ def smtp_configuration_submit(
     configuration.port = port
     configuration.username = username.strip() or None
     configuration.from_email = normalized_from
-    configuration.from_name = from_name.strip() or "ST. PRIDE Volunteer Management"
+    configuration.from_name = from_name.strip() or get_settings().app_name
     configuration.use_starttls = use_starttls
     configuration.use_ssl = use_ssl
     configuration.enabled = enabled

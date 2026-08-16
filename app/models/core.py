@@ -1,4 +1,4 @@
-"""Persistent domain model for the ST. PRIDE Volunteer Manager.
+"""Persistent domain model for the Volunteer Manager.
 
 The initial migration remains deliberately compatible with the earlier project
 scaffold.  New workflow fields live alongside those columns so existing DEV
@@ -525,7 +525,7 @@ class SMTPConfiguration(TimestampMixin, Base):
     username: Mapped[str | None] = mapped_column(String(255))
     from_email: Mapped[str] = mapped_column(String(255), nullable=False)
     from_name: Mapped[str] = mapped_column(
-        String(255), default="ST. PRIDE Volunteer Management", nullable=False
+        String(255), default="Volunteer Manager", nullable=False
     )
     use_starttls: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     use_ssl: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

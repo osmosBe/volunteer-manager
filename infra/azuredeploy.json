@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.45.15.27210",
-      "templateHash": "16618362065871008328"
+      "templateHash": "6982229963396992361"
     }
   },
   "parameters": {
@@ -98,6 +98,13 @@
         "description": "Show a global warning that the application is running in demo mode."
       }
     },
+    "appName": {
+      "type": "string",
+      "defaultValue": "Volunteer Manager",
+      "metadata": {
+        "description": "Application name shown in page titles and administration views."
+      }
+    },
     "mailProvider": {
       "type": "string",
       "defaultValue": "console",
@@ -118,7 +125,7 @@
     },
     "mailFromName": {
       "type": "string",
-      "defaultValue": "ST. PRIDE Volunteer Manager",
+      "defaultValue": "Volunteer Manager",
       "metadata": {
         "description": "Display name used for transactional mail."
       }
@@ -174,7 +181,7 @@
     "generatedStorageName": "[take(format('{0}{1}{2}', variables('normalizedPrefix'), parameters('environmentName'), variables('suffix')), 24)]",
     "workspaceName": "[format('{0}-{1}-logs', parameters('namePrefix'), parameters('environmentName'))]",
     "tags": {
-      "application": "st-pride-volunteer-manager",
+      "application": "volunteer-manager",
       "environment": "[parameters('environmentName')]",
       "managedBy": "bicep"
     },
@@ -783,6 +790,9 @@
           "demoMode": {
             "value": "[parameters('demoMode')]"
           },
+          "appName": {
+            "value": "[parameters('appName')]"
+          },
           "mailProvider": {
             "value": "[parameters('mailProvider')]"
           },
@@ -818,7 +828,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.45.15.27210",
-              "templateHash": "2020515735487059570"
+              "templateHash": "16333485296342125406"
             }
           },
           "parameters": {
@@ -877,6 +887,13 @@
                 "description": "Show the global demo-mode warning in the application UI."
               }
             },
+            "appName": {
+              "type": "string",
+              "defaultValue": "Volunteer Manager",
+              "metadata": {
+                "description": "Application name shown in page titles and administration views."
+              }
+            },
             "mailProvider": {
               "type": "string",
               "defaultValue": "console",
@@ -893,7 +910,7 @@
             },
             "mailFromName": {
               "type": "string",
-              "defaultValue": "ST. PRIDE Volunteer Manager",
+              "defaultValue": "Volunteer Manager",
               "metadata": {
                 "description": "Transactional mail sender display name."
               }
@@ -974,7 +991,7 @@
                     {
                       "name": "volunteer-manager",
                       "image": "[parameters('image')]",
-                      "env": "[concat(createArray(createObject('name', 'DATABASE_URL', 'secretRef', 'database-url'), createObject('name', 'ENVIRONMENT', 'value', 'development'), createObject('name', 'AUTH_MODE', 'value', 'easyauth'), createObject('name', 'SEED_DEMO_DATA', 'value', 'false'), createObject('name', 'DEMO_MODE', 'value', string(parameters('demoMode'))), createObject('name', 'MAIL_PROVIDER', 'value', parameters('mailProvider')), createObject('name', 'MAIL_FROM_ADDRESS', 'value', parameters('mailFromAddress')), createObject('name', 'MAIL_FROM_NAME', 'value', parameters('mailFromName')), createObject('name', 'MAIL_REPLY_TO', 'value', parameters('mailReplyTo')), createObject('name', 'M365_TENANT_ID', 'value', parameters('m365TenantId')), createObject('name', 'M365_CLIENT_ID', 'value', parameters('m365ClientId')), createObject('name', 'M365_AUTH_MODE', 'value', parameters('m365AuthMode'))), if(empty(parameters('m365ClientSecret')), createArray(), createArray(createObject('name', 'M365_CLIENT_SECRET', 'secretRef', 'm365-client-secret'))))]",
+                      "env": "[concat(createArray(createObject('name', 'DATABASE_URL', 'secretRef', 'database-url'), createObject('name', 'ENVIRONMENT', 'value', 'development'), createObject('name', 'AUTH_MODE', 'value', 'easyauth'), createObject('name', 'SEED_DEMO_DATA', 'value', 'false'), createObject('name', 'DEMO_MODE', 'value', string(parameters('demoMode'))), createObject('name', 'APP_NAME', 'value', parameters('appName')), createObject('name', 'MAIL_PROVIDER', 'value', parameters('mailProvider')), createObject('name', 'MAIL_FROM_ADDRESS', 'value', parameters('mailFromAddress')), createObject('name', 'MAIL_FROM_NAME', 'value', parameters('mailFromName')), createObject('name', 'MAIL_REPLY_TO', 'value', parameters('mailReplyTo')), createObject('name', 'M365_TENANT_ID', 'value', parameters('m365TenantId')), createObject('name', 'M365_CLIENT_ID', 'value', parameters('m365ClientId')), createObject('name', 'M365_AUTH_MODE', 'value', parameters('m365AuthMode'))), if(empty(parameters('m365ClientSecret')), createArray(), createArray(createObject('name', 'M365_CLIENT_SECRET', 'secretRef', 'm365-client-secret'))))]",
                       "resources": {
                         "cpu": "[json('0.5')]",
                         "memory": "1Gi"

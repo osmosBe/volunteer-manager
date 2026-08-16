@@ -23,6 +23,7 @@ services:
     ports:
       - "${APP_PORT:-8000}:8000"
     environment:
+      APP_NAME: "${APP_NAME:-Volunteer Manager}"
       # Keep the raw PostgreSQL password and URL-encoded DATABASE_URL separate:
       # reserved characters in passwords cannot be safely interpolated into a URL.
       DATABASE_URL: "${DATABASE_URL:?Set DATABASE_URL with host postgres in .env}"
@@ -38,6 +39,7 @@ services:
       OIDC_GROUP_CLAIMS: "${OIDC_GROUP_CLAIMS:-groups}"
       MAIL_PROVIDER: "${MAIL_PROVIDER:-console}"
       MAIL_FROM_ADDRESS: "${MAIL_FROM_ADDRESS:-}"
+      MAIL_FROM_NAME: "${MAIL_FROM_NAME:-Volunteer Manager}"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz')"]
       interval: 30s

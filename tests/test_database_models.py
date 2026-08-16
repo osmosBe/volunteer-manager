@@ -130,7 +130,7 @@ def test_database_diagnostics_handles_uninitialized_schema(tmp_path):
         "database_reachable": True,
         "schema_initialized": False,
         "current_revision": None,
-        "expected_revision": "20260816_0013",
+        "expected_revision": "20260816_0014",
         "migration_pending": True,
         "tables": {"events": False, "volunteers": False, "shifts": False},
         "diagnostic_error": None,
@@ -208,6 +208,73 @@ def test_initial_migration_creates_tables(tmp_path):
         assert branding.logo_data is None
 
 
+def test_neutral_branding_migration_updates_existing_defaults(tmp_path):
+    db_path = tmp_path / "legacy-branding.db"
+    env = {**os.environ, "DATABASE_URL": f"sqlite:///{db_path}"}
+    subprocess.run(
+        [sys.executable, "-m", "alembic", "upgrade", "20260816_0013"],
+        check=True,
+        env=env,
+        cwd=os.getcwd(),
+    )
+    legacy_brand = bytes((83, 84, 46, 32, 80, 82, 73, 68, 69)).decode("ascii")
+    legacy_slug = bytes((112, 114, 105, 100, 101, 45, 50, 48, 50, 54)).decode("ascii")
+    engine = create_database_engine(f"sqlite:///{db_path}")
+    Session = sessionmaker(bind=engine)
+    with Session() as db:
+        db.add_all(
+            [
+                Event(
+                    name=f"{legacy_brand} Demo",
+                    slug=legacy_slug,
+                    short_description=f"{legacy_brand} Demo",
+                    description=f"Managed by {legacy_brand}",
+                    public_meeting_point=f"{legacy_brand} Infostand",
+                    status=EventStatus.draft,
+                ),
+                SMTPConfiguration(
+                    host="smtp.example.invalid",
+                    from_email="sender@example.invalid",
+                    from_name=f"{legacy_brand} Volunteer Management",
+                ),
+                MailTemplate(
+                    key="legacy_branding_test",
+                    name="Legacy branding test",
+                    trigger_description="Migration test",
+                    subject_template="Test",
+                    body_template=f"Message from {legacy_brand}",
+                    delivery_mode="manual",
+                ),
+            ]
+        )
+        db.commit()
+    engine.dispose()
+
+    subprocess.run(
+        [sys.executable, "-m", "alembic", "upgrade", "head"],
+        check=True,
+        env=env,
+        cwd=os.getcwd(),
+    )
+
+    engine = create_database_engine(f"sqlite:///{db_path}")
+    Session = sessionmaker(bind=engine)
+    with Session() as db:
+        event = db.query(Event).one()
+        smtp = db.query(SMTPConfiguration).one()
+        template = db.query(MailTemplate).filter_by(key="legacy_branding_test").one()
+        assert event.name == "Demo-Veranstaltung 2026"
+        assert event.slug == "demo-2026"
+        assert event.public_meeting_point == "Demo-Infostand"
+        assert legacy_brand not in smtp.from_name
+        assert legacy_brand not in template.body_template
+    smtp_columns = {
+        column["name"]: column
+        for column in inspect(engine).get_columns("smtp_configurations")
+    }
+    assert legacy_brand not in str(smtp_columns["from_name"]["default"])
+
+
 def test_default_event_seed_is_idempotent(tmp_path):
     engine = create_database_engine(f"sqlite:///{tmp_path / 'seed.db'}")
     Base.metadata.create_all(engine)
@@ -218,7 +285,7 @@ def test_default_event_seed_is_idempotent(tmp_path):
         second = ensure_default_event(db)
         assert first.id == second.id
         assert db.query(Event).count() == 1
-        assert first.slug == "pride-2026"
+        assert first.slug == "demo-2026"
 
 
 def test_demo_seed_is_idempotent_and_uses_fictional_contacts(tmp_path):
@@ -279,6 +346,9 @@ def test_deployment_uses_fixed_database_job_entrypoint():
     assert "--args" not in workflow
     assert '--set-env-vars "SEED_DEMO_DATA=$seed_demo_data"' in workflow
     assert '--set-env-vars "DEMO_MODE=$demo_mode"' in workflow
+    assert "IMAGE_NAME: volunteer-manager" in workflow
+    assert '"APP_NAME=$app_name"' in workflow
+    assert 'os.environ["DEPLOYED_APP_NAME"]' in workflow
     assert "data-demo-mode-indicator" in workflow
     assert "scripts/deploy_database.py" in migration_job
     assert "scripts.seed_default_event" not in workflow

@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 env:
-  IMAGE_NAME: stpride-volunteer-management
+  IMAGE_NAME: volunteer-manager
   DEPLOY_SHA: ${{ inputs.deploy_sha }}
 
 jobs:
@@ -111,9 +111,11 @@ jobs:
             --target-port 8000 \
             --output none
 
-      - name: Configure DEV demo mode
+      - name: Configure DEV presentation
         env:
           CONFIG_DEMO_MODE: ${{ vars.DEMO_MODE }}
+          CONFIG_APP_NAME: ${{ vars.APP_NAME }}
+          CONFIG_MAIL_FROM_NAME: ${{ vars.MAIL_FROM_NAME }}
         run: |
           case "$CONFIG_DEMO_MODE" in
             ""|true)
@@ -127,12 +129,15 @@ jobs:
               exit 1
               ;;
           esac
+          app_name="${CONFIG_APP_NAME:-Volunteer Manager}"
+          mail_from_name="${CONFIG_MAIL_FROM_NAME:-$app_name}"
           az containerapp update \
             --name "$CONTAINER_APP_NAME" \
             --resource-group "$RESOURCE_GROUP" \
-            --set-env-vars "DEMO_MODE=$demo_mode" \
+            --set-env-vars "DEMO_MODE=$demo_mode" "APP_NAME=$app_name" "MAIL_FROM_NAME=$mail_from_name" \
             --output none
           echo "DEPLOYED_DEMO_MODE=$demo_mode" >> "$GITHUB_ENV"
+          echo "DEPLOYED_APP_NAME=$app_name" >> "$GITHUB_ENV"
 
       - name: Run database deployment job
         env:
@@ -215,13 +220,14 @@ jobs:
             exit 1
           fi
           landing_html=$(curl --fail --silent --show-error "$base_url/")
+          printf '%s' "$landing_html" | python -c 'import html, os, re, sys; page = sys.stdin.read(); title = re.search(r"<title>(.*?)</title>", page, re.IGNORECASE | re.DOTALL); assert title and html.unescape(title.group(1)).strip() == os.environ["DEPLOYED_APP_NAME"]'
           if [ "$DEPLOYED_DEMO_MODE" = "true" ]; then
             printf '%s' "$landing_html" | grep -q 'data-demo-mode-indicator'
           elif printf '%s' "$landing_html" | grep -q 'data-demo-mode-indicator'; then
             echo "DEV unexpectedly displays the demo-mode indicator." >&2
             exit 1
           fi
-          echo "DEV revision, Alembic migration, liveness, readiness and demo-mode presentation passed for $EXPECTED_VERSION."
+          echo "DEV revision, Alembic migration, liveness, readiness, branding and demo-mode presentation passed for $EXPECTED_VERSION."
 
       - name: Diagnose failed DEV deployment
         if: failure()

@@ -18,8 +18,8 @@ def test_public_registration_and_cancellation_flow(tmp_path):
     start = datetime.now(timezone.utc) + timedelta(days=1)
     with Session() as db:
         event = Event(
-            name="ST. PRIDE Test",
-            slug="stpride-test",
+            name="Volunteer Test",
+            slug="volunteer-test",
             is_public=True,
             status=EventStatus.registration_open,
         )
@@ -43,29 +43,31 @@ def test_public_registration_and_cancellation_flow(tmp_path):
     try:
         client = TestClient(app)
         assert client.get("/").status_code == 200
-        event_page = client.get("/veranstaltungen/stpride-test")
+        event_page = client.get("/veranstaltungen/volunteer-test")
         assert event_page.status_code == 200
         assert (
-            f"/veranstaltungen/stpride-test/anmeldung?shift_id={shift_id}#registration-form"
+            f"/veranstaltungen/volunteer-test/anmeldung?shift_id={shift_id}#registration-form"
             in event_page.text
         )
         direct_registration = client.get(
-            f"/veranstaltungen/stpride-test/anmeldung?shift_id={shift_id}"
+            f"/veranstaltungen/volunteer-test/anmeldung?shift_id={shift_id}"
         )
         assert direct_registration.status_code == 200
         assert re.search(
             rf'id="shift-{shift_id}"[^>]*checked', direct_registration.text
         )
-        assert client.get("/veranstaltungen/stpride-test/anmeldung").status_code == 200
+        assert (
+            client.get("/veranstaltungen/volunteer-test/anmeldung").status_code == 200
+        )
         assert (
             "Zusammenfassung vor dem Absenden"
-            in client.get("/veranstaltungen/stpride-test/anmeldung").text
+            in client.get("/veranstaltungen/volunteer-test/anmeldung").text
         )
-        valid_form = client.get("/veranstaltungen/stpride-test/anmeldung")
+        valid_form = client.get("/veranstaltungen/volunteer-test/anmeldung")
         assert "data-form-error-summary" not in valid_form.text
         assert "/static/js/forms.js" in valid_form.text
         missing_required = client.post(
-            "/veranstaltungen/stpride-test/anmeldung",
+            "/veranstaltungen/volunteer-test/anmeldung",
             data={
                 "first_name": "",
                 "last_name": "Muster",
@@ -84,7 +86,7 @@ def test_public_registration_and_cancellation_flow(tmp_path):
         assert 'aria-describedby="first_name-error"' in missing_required.text
         assert 'data-field-error-for="first_name"' in missing_required.text
         invalid_email = client.post(
-            "/veranstaltungen/stpride-test/anmeldung",
+            "/veranstaltungen/volunteer-test/anmeldung",
             data={
                 "first_name": "<script>alert(1)</script>",
                 "last_name": "Muster",
@@ -101,7 +103,7 @@ def test_public_registration_and_cancellation_flow(tmp_path):
         assert 'value="&lt;script&gt;alert(1)&lt;/script&gt;"' in invalid_email.text
         assert 'value="<script>alert(1)</script>"' not in invalid_email.text
         invalid = client.post(
-            "/veranstaltungen/stpride-test/anmeldung",
+            "/veranstaltungen/volunteer-test/anmeldung",
             data={
                 "first_name": "Alex",
                 "last_name": "Muster",
@@ -124,7 +126,7 @@ def test_public_registration_and_cancellation_flow(tmp_path):
         assert 'id="contact_consent"' in invalid.text
         assert re.search(r'id="contact_consent"[^>]*checked', invalid.text)
         response = client.post(
-            "/veranstaltungen/stpride-test/anmeldung",
+            "/veranstaltungen/volunteer-test/anmeldung",
             data={
                 "first_name": "Alex",
                 "last_name": "Muster",
@@ -207,7 +209,7 @@ def test_public_event_content_and_shift_filters(tmp_path):
     )
     with Session() as db:
         event = Event(
-            name="Filterbare PRIDE",
+            name="Filterbare Veranstaltung",
             slug="filterbar",
             short_description="Gemeinsam helfen",
             description="Ausführliche Beschreibung",

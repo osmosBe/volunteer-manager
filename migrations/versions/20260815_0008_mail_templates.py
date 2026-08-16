@@ -64,7 +64,7 @@ def upgrade() -> None:
                     "Hallo {first_name},\n\ndeine Anmeldung für {event_name} "
                     "wurde erfasst. Bitte bestätige deine E-Mail-Adresse:\n"
                     "{verification_url}\n\nDeine Anmeldung verwalten:\n{edit_url}"
-                    "\n\nST. PRIDE"
+                    "\n\nDein Veranstaltungsteam"
                 ),
                 "delivery_mode": "automatic",
                 "created_at": timestamp,
@@ -79,7 +79,7 @@ def upgrade() -> None:
                     "Hallo {first_name},\n\nbitte bestätige deine neue "
                     "E-Mail-Adresse für {event_name}:\n{verification_url}\n\n"
                     "Dein bestätigter Anmelde- und Schichtstatus bleibt unverändert."
-                    "\n\nST. PRIDE"
+                    "\n\nDein Veranstaltungsteam"
                 ),
                 "delivery_mode": "automatic",
                 "created_at": timestamp,
@@ -94,7 +94,7 @@ def upgrade() -> None:
                 ),
                 "body_template": (
                     "Hallo {first_name},\n\ndeine Kontaktdaten oder Schichten für "
-                    "{event_name} wurden aktualisiert.\n\nST. PRIDE"
+                    "{event_name} wurden aktualisiert.\n\nDein Veranstaltungsteam"
                 ),
                 "delivery_mode": "manual",
                 "created_at": timestamp,
@@ -107,7 +107,7 @@ def upgrade() -> None:
                 "subject_template": "Schicht bei {event_name} storniert",
                 "body_template": (
                     "Hallo {first_name},\n\ndeine Schicht „{shift_title}“ bei "
-                    "{event_name} wurde storniert.\n\nST. PRIDE"
+                    "{event_name} wurde storniert.\n\nDein Veranstaltungsteam"
                 ),
                 "delivery_mode": "manual",
                 "created_at": timestamp,
@@ -123,7 +123,7 @@ def upgrade() -> None:
                 "body_template": (
                     "Hallo {first_name},\n\nleider können wir deine Anmeldung für "
                     "{event_name} nicht annehmen.\nBegründung: {reason}\n\n"
-                    "Bei Rückfragen: {contact_email}\n\nST. PRIDE"
+                    "Bei Rückfragen: {contact_email}\n\nDein Veranstaltungsteam"
                 ),
                 "delivery_mode": "automatic",
                 "created_at": timestamp,
@@ -137,7 +137,7 @@ def upgrade() -> None:
                 "body_template": (
                     "Hallo {first_name},\n\ndu bist für die Schicht „{shift_title}“ "
                     "bei {event_name} von der Warteliste nachgerückt und nun "
-                    "bestätigt.\n\nST. PRIDE"
+                    "bestätigt.\n\nDein Veranstaltungsteam"
                 ),
                 "delivery_mode": "automatic",
                 "created_at": timestamp,
