@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "components/form_errors.html" import form_error_summary %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
   <div>
@@ -8,9 +9,7 @@
   <a class="btn btn-outline-secondary" href="/admin">Zurück</a>
 </div>
 
-<div id="permission-error-summary" class="alert alert-danger{% if not error %} d-none{% endif %}" role="alert" aria-live="polite">
-  {{ error or "Bitte korrigiere die markierten Eingaben." }}
-</div>
+{{ form_error_summary(error, None, "permission-error-summary") }}
 
 {% for permission in permissions %}
 <section class="card mb-4">
@@ -90,7 +89,6 @@
 
 <script>
 (() => {
-  const summary = document.getElementById("permission-error-summary");
   const configure = (form) => {
     const type = form.querySelector(".mapping-type");
     const value = form.querySelector(".mapping-value");
@@ -106,18 +104,10 @@
       value.setCustomValidity("");
     };
     type.addEventListener("change", apply);
-    value.addEventListener("input", () => { value.setCustomValidity(""); summary.classList.add("d-none"); });
+    value.addEventListener("input", () => value.setCustomValidity(""));
     apply();
   };
   document.querySelectorAll(".mapping-form").forEach(configure);
-  document.querySelectorAll(".permission-form").forEach((form) => form.addEventListener("submit", (event) => {
-    if (!form.checkValidity()) {
-      event.preventDefault();
-      summary.textContent = "Bitte korrigiere die markierten Eingaben.";
-      summary.classList.remove("d-none");
-      form.classList.add("was-validated");
-    }
-  }));
 })();
 </script>
 {% endblock %}

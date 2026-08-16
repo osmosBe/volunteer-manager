@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "components/form_errors.html" import field_error, form_error_summary %}
 {% block content %}
 <style>
   .shift-option { cursor: pointer; transition: border-color .15s, background-color .15s, box-shadow .15s; }
@@ -9,19 +10,6 @@
 
 <h1>Anmeldung: {{ event.name }}</h1>
 <p>{{ event.short_description or '' }}</p>
-
-<div
-  id="registration-errors"
-  class="alert alert-danger{% if not error %} d-none{% endif %}"
-  role="alert"
-  aria-live="assertive"
-  tabindex="-1"
->
-  <strong>Bitte prüfe deine Angaben:</strong>
-  <ul id="registration-error-list" class="mb-0 mt-2">
-    {% if error %}<li data-server-error>{{ error }}</li>{% endif %}
-  </ul>
-</div>
 
 <form class="card card-body mb-4" method="get">
   <h2 class="h5">Schichten filtern</h2>
@@ -46,15 +34,15 @@
   </div>
 </form>
 
+{{ form_error_summary(error, field_errors, "registration-errors") }}
 <form
   method="post"
   id="registration-form"
   novalidate
-  aria-describedby="registration-errors"
   data-event-date="{{ event.starts_at.date().isoformat() if event.starts_at else '' }}"
   data-allows-minors="{{ 'true' if event.allows_minors else 'false' }}"
 >
-  <fieldset class="mb-4" id="shift-selection">
+  <fieldset class="mb-4" id="shift-selection" tabindex="-1" data-required-group="shift_ids" data-required-message="Bitte wähle mindestens eine Schicht aus."{% if field_errors.get('shift_ids') %} aria-invalid="true" aria-describedby="shift_ids-error"{% endif %}>
     <legend class="h3">1. Schichten auswählen</legend>
     <p class="text-muted">Du kannst eine oder mehrere Schichten wählen. Ausgewählte Schichten werden farbig markiert.</p>
     {% for shift in shifts %}
@@ -90,22 +78,25 @@
     {% else %}
       <p class="alert alert-info">Keine Schichten entsprechen dem Filter.</p>
     {% endfor %}
+    {{ field_error("shift_ids", field_errors) }}
   </fieldset>
 
   <fieldset class="mb-4">
     <legend class="h3">2. Deine Daten</legend>
     <div class="row g-3">
-      <div class="col-md-6"><label class="form-label" for="first_name">Vorname</label><input class="form-control" required autocomplete="given-name" id="first_name" name="first_name" value="{{ form_values.first_name or '' }}"></div>
-      <div class="col-md-6"><label class="form-label" for="last_name">Nachname</label><input class="form-control" required autocomplete="family-name" id="last_name" name="last_name" value="{{ form_values.last_name or '' }}"></div>
+      <div class="col-md-6"><label class="form-label" for="first_name">Vorname</label><input class="form-control{% if field_errors.get('first_name') %} is-invalid{% endif %}" required autocomplete="given-name" id="first_name" name="first_name" value="{{ form_values.first_name or '' }}"{% if field_errors.get('first_name') %} aria-invalid="true" aria-describedby="first_name-error"{% endif %}>{{ field_error("first_name", field_errors) }}</div>
+      <div class="col-md-6"><label class="form-label" for="last_name">Nachname</label><input class="form-control{% if field_errors.get('last_name') %} is-invalid{% endif %}" required autocomplete="family-name" id="last_name" name="last_name" value="{{ form_values.last_name or '' }}"{% if field_errors.get('last_name') %} aria-invalid="true" aria-describedby="last_name-error"{% endif %}>{{ field_error("last_name", field_errors) }}</div>
       <div class="col-md-6">
         <label class="form-label" for="email">E-Mail-Adresse</label>
-        <input class="form-control" required autocomplete="email" type="email" id="email" name="email" value="{{ form_values.email or '' }}">
-        <div class="form-text">Die Adresse wird zusätzlich serverseitig validiert.</div>
+        <input class="form-control{% if field_errors.get('email') %} is-invalid{% endif %}" required autocomplete="email" type="email" id="email" name="email" value="{{ form_values.email or '' }}"{% if field_errors.get('email') %} aria-invalid="true" aria-describedby="email-help email-error"{% else %} aria-describedby="email-help"{% endif %}>
+        {{ field_error("email", field_errors) }}
+        <div class="form-text" id="email-help">Die Adresse wird zusätzlich serverseitig validiert.</div>
       </div>
       <div class="col-md-6">
         <label class="form-label" for="birth_date">Geburtsdatum</label>
-        <input class="form-control" required autocomplete="bday" type="date" id="birth_date" name="birth_date" value="{{ form_values.birth_date or '' }}">
-        <div class="form-text">Wird zur Prüfung der Altersfreigabe am Veranstaltungstag verwendet.</div>
+        <input class="form-control{% if field_errors.get('birth_date') %} is-invalid{% endif %}" required autocomplete="bday" type="date" id="birth_date" name="birth_date" value="{{ form_values.birth_date or '' }}"{% if field_errors.get('birth_date') %} aria-invalid="true" aria-describedby="birth-date-help birth_date-error"{% else %} aria-describedby="birth-date-help"{% endif %}>
+        {{ field_error("birth_date", field_errors) }}
+        <div class="form-text" id="birth-date-help">Wird zur Prüfung der Altersfreigabe am Veranstaltungstag verwendet.</div>
       </div>
       <div class="col-md-6"><label class="form-label" for="phone">Telefonnummer <span class="text-muted">(optional)</span></label><input class="form-control" autocomplete="tel" type="tel" id="phone" name="phone" value="{{ form_values.phone or '' }}"></div>
       <div class="col-md-6"><label class="form-label" for="pronouns">Pronomen <span class="text-muted">(optional)</span></label><input class="form-control" id="pronouns" name="pronouns" value="{{ form_values.pronouns or '' }}"></div>
@@ -119,9 +110,10 @@
   </section>
 
   <div class="form-check mb-2">
-    <input class="form-check-input" required type="checkbox" id="contact_consent" name="contact_consent" value="true" {% if form_values.contact_consent %}checked{% endif %}>
+    <input class="form-check-input{% if field_errors.get('contact_consent') %} is-invalid{% endif %}" required type="checkbox" id="contact_consent" name="contact_consent" value="true" {% if form_values.contact_consent %}checked{% endif %}{% if field_errors.get('contact_consent') %} aria-invalid="true" aria-describedby="contact_consent-error"{% endif %}>
     <label class="form-check-label" for="contact_consent">Ich stimme zu, für diese Veranstaltung kontaktiert zu werden.</label>
   </div>
+  {{ field_error("contact_consent", field_errors) }}
   <div class="form-check mb-4">
     <input class="form-check-input" type="checkbox" id="future_contact_consent" name="future_contact_consent" value="true" {% if form_values.future_contact_consent %}checked{% endif %}>
     <label class="form-check-label" for="future_contact_consent">ST. PRIDE darf mich künftig über weitere Ehrenamtsmöglichkeiten informieren.</label>

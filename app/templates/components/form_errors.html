@@ -1,0 +1,31 @@
+{% macro form_error_summary(error=None, field_errors=None, summary_id="form-error-summary") -%}
+  {% set has_errors = error or field_errors %}
+  {% if has_errors %}
+  <section
+    id="{{ summary_id }}"
+    class="alert alert-danger"
+    role="alert"
+    aria-live="assertive"
+    tabindex="-1"
+    data-form-error-summary
+  >
+    <h2 class="h5">Bitte überprüfe deine Eingaben.</h2>
+    <ul class="mb-0" data-form-error-list>
+      {% if error %}<li data-server-error>{{ error }}</li>{% endif %}
+      {% if field_errors %}
+        {% for field_name, message in field_errors.items() %}
+          <li data-server-error data-error-for="{{ field_name }}"><a href="#{{ field_name }}">{{ message }}</a></li>
+        {% endfor %}
+      {% endif %}
+    </ul>
+  </section>
+  {% endif %}
+{%- endmacro %}
+
+{% macro field_error(field_name, field_errors=None) -%}
+  {% if field_errors and field_errors.get(field_name) %}
+    <div id="{{ field_name }}-error" class="invalid-feedback d-block" data-field-error-for="{{ field_name }}" data-server-field-error>
+      {{ field_errors.get(field_name) }}
+    </div>
+  {% endif %}
+{%- endmacro %}

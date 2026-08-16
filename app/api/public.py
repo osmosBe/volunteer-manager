@@ -35,7 +35,9 @@ def _parse_birth_date(value: str) -> date:
     try:
         parsed = date.fromisoformat(value)
     except ValueError as exc:
-        raise RegistrationError("Bitte gib ein gültiges Geburtsdatum an.") from exc
+        raise RegistrationError(
+            "Bitte gib ein gültiges Geburtsdatum an.", "birth_date"
+        ) from exc
     return parsed
 
 
@@ -44,7 +46,7 @@ def _parse_shift_ids(values: list[str] | None) -> list[int]:
         return [int(value) for value in values or []]
     except (TypeError, ValueError) as exc:
         raise RegistrationError(
-            "Mindestens eine ausgewählte Schicht ist ungültig."
+            "Mindestens eine ausgewählte Schicht ist ungültig.", "shift_ids"
         ) from exc
 
 
@@ -60,6 +62,7 @@ def _registration_form_context(
     selected_shift_ids: set[int] | None = None,
     form_values: dict[str, str | bool] | None = None,
     error: str | None = None,
+    field_errors: dict[str, str] | None = None,
 ) -> dict:
     shifts, places = filtered_open_shifts(
         db,
@@ -84,6 +87,7 @@ def _registration_form_context(
         "selected_shift_ids": selected_shift_ids or set(),
         "form_values": form_values or {},
         "error": error,
+        "field_errors": field_errors or {},
     }
 
 
@@ -267,6 +271,7 @@ def submit_registration(
             parsed_shift_ids,
         )
     except RegistrationError as exc:
+        field_errors = {exc.field_name: str(exc)} if exc.field_name else {}
         return templates.TemplateResponse(
             request,
             "registration_form.html",
@@ -275,7 +280,8 @@ def submit_registration(
                 event,
                 selected_shift_ids=selected_shift_ids,
                 form_values=form_values,
-                error=str(exc),
+                error=None if field_errors else str(exc),
+                field_errors=field_errors,
             ),
             status_code=422,
         )
@@ -360,6 +366,8 @@ def edit_registration(token: str, request: Request, db: DatabaseSession):
             "shifts": shifts,
             "selected_shift_ids": selected_shift_ids,
             "error": None,
+            "field_errors": {},
+            "form_values": {},
         },
     )
 
@@ -369,21 +377,36 @@ def submit_registration_edit(
     token: str,
     request: Request,
     db: DatabaseSession,
-    first_name: Annotated[str, Form()],
-    last_name: Annotated[str, Form()],
-    email: Annotated[str, Form()],
+    first_name: Annotated[str, Form()] = "",
+    last_name: Annotated[str, Form()] = "",
+    email: Annotated[str, Form()] = "",
     contact_consent: Annotated[bool, Form()] = False,
-    shift_ids: Annotated[list[int] | None, Form()] = None,
+    shift_ids: Annotated[list[str] | None, Form()] = None,
     phone: Annotated[str | None, Form()] = None,
     pronouns: Annotated[str | None, Form()] = None,
-    birth_date: Annotated[date, Form()] = ...,
+    birth_date: Annotated[str, Form()] = "",
     future_contact_consent: Annotated[bool, Form()] = False,
 ):
     volunteer = get_volunteer_by_edit_token(db, token)
     if volunteer is None:
         raise HTTPException(status_code=404, detail="Bearbeitungslink ungültig.")
     event = get_public_event(db, volunteer.event.slug)
+    form_values: dict[str, str | bool] = {
+        "first_name": first_name,
+        "last_name": last_name,
+        "email": email,
+        "birth_date": birth_date,
+        "phone": phone or "",
+        "pronouns": pronouns or "",
+        "contact_consent": contact_consent,
+        "future_contact_consent": future_contact_consent,
+    }
+    selected_shift_ids = {
+        int(value) for value in shift_ids or [] if str(value).isdigit()
+    }
     try:
+        parsed_shift_ids = _parse_shift_ids(shift_ids)
+        parsed_birth_date = _parse_birth_date(birth_date)
         update_registration(
             db,
             volunteer,
@@ -393,14 +416,15 @@ def submit_registration_edit(
                 email=email,
                 phone=phone,
                 pronouns=pronouns,
-                birth_date=birth_date,
+                birth_date=parsed_birth_date,
                 contact_consent=contact_consent,
                 future_contact_consent=future_contact_consent,
             ),
-            shift_ids or [],
+            parsed_shift_ids,
         )
     except RegistrationError as exc:
         shifts = [shift for shift in event.shifts if shift.status == ShiftStatus.open]
+        field_errors = {exc.field_name: str(exc)} if exc.field_name else {}
         return templates.TemplateResponse(
             request,
             "registration_edit.html",
@@ -409,8 +433,10 @@ def submit_registration_edit(
                 "volunteer": volunteer,
                 "token": token,
                 "shifts": shifts,
-                "selected_shift_ids": set(shift_ids or []),
-                "error": str(exc),
+                "selected_shift_ids": selected_shift_ids,
+                "error": None if field_errors else str(exc),
+                "field_errors": field_errors,
+                "form_values": form_values,
             },
             status_code=422,
         )
