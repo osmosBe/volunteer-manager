@@ -103,7 +103,7 @@
     <label class="form-label" for="accessibility_info">Barrierefreiheit</label>
     <textarea class="form-control" rows="4" id="accessibility_info" name="accessibility_info">{{ form_values.accessibility_info }}</textarea>
   </div>
-  <div class="col-md-4">
+  <div class="col-md-3">
     <label class="form-label" for="status">Status</label>
     <select class="form-select" id="status" name="status">
       {% for value in ['draft','registration_open','registration_closed','ongoing','completed','archived'] %}
@@ -111,13 +111,17 @@
       {% endfor %}
     </select>
   </div>
-  <div class="col-md-4 form-check align-self-end mb-2">
+  <div class="col-md-3 form-check align-self-end mb-2">
     <input class="form-check-input" type="checkbox" value="true" id="allows_minors" name="allows_minors" {% if form_values.allows_minors %}checked{% endif %}>
     <label class="form-check-label" for="allows_minors">Teilnahme unter 18 grundsätzlich erlauben</label>
   </div>
-  <div class="col-md-4 form-check align-self-end mb-2">
+  <div class="col-md-3 form-check align-self-end mb-2">
     <input class="form-check-input" type="checkbox" value="true" id="is_public" name="is_public" {% if form_values.is_public %}checked{% endif %}>
     <label class="form-check-label" for="is_public">Öffentlich sichtbar</label>
+  </div>
+  <div class="col-md-3 form-check align-self-end mb-2">
+    <input class="form-check-input" type="checkbox" value="true" id="goodiebag_offered" name="goodiebag_offered" {% if form_values.goodiebag_offered %}checked{% endif %}>
+    <label class="form-check-label" for="goodiebag_offered">Goodiebags anbieten</label>
   </div>
   <div class="col-12">
     <p class="form-text">Bei aktivierter U18-Teilnahme müssen die einzelnen Schichten ebenfalls für Minderjährige freigegeben sein.</p>

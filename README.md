@@ -70,7 +70,8 @@ That separation keeps the same application image usable in Azure Container Apps,
 - Events, teams/areas, roles/tasks, shifts, and capacities
 - Volunteer approval, rejection, assignment, and bulk actions
 - Waiting-list promotion and briefing status
-- Mobile event check-in, QR scan, check-out, and material tracking
+- Mobile event check-in, QR scan, check-out, material returns, and optional
+  Goodiebag hand-out tracking with event defaults and per-shift overrides
 - Print views for shift plans, check-in lists, and QR cards
 - CSV exports for contacts and shifts
 

@@ -124,6 +124,7 @@ def ensure_demo_data(db: Session) -> Event:
     event.status = EventStatus.registration_open
     event.is_public = True
     event.allows_minors = True
+    event.goodiebag_offered = True
     event.contact_name = "Demo Veranstaltungskoordination"
     event.contact_email = "demo-kontakt@example.invalid"
     event.contact_phone = "+43 000 000 000"
@@ -264,6 +265,7 @@ def ensure_demo_data(db: Session) -> Event:
             status=ShiftStatus.open,
             allows_minors=minors,
             requires_birth_date=True,
+            goodiebag_override=False if team_name == "Abbau" else None,
         )
         roles[role_name] = role
         shifts.append(shift)
@@ -411,6 +413,7 @@ def ensure_demo_data(db: Session) -> Event:
             lanyard_issued=True,
             wristband_issued=index % 2 == 0,
             radio_issued=index % 2 == 1,
+            goodiebag_received=bool(checked_out_at and index % 2 == 0),
             materials_returned_at=checked_out_at,
             note="Fiktiver Check-in für die Funktionsdemo.",
         )

@@ -7,6 +7,7 @@ from app.models import (
     AssignmentStatus,
     CheckIn,
     CheckInMaterial,
+    Shift,
     ShiftAssignment,
 )
 from app.models.core import utcnow
@@ -14,6 +15,12 @@ from app.models.core import utcnow
 
 class CheckInError(ValueError):
     pass
+
+
+def goodiebag_is_offered(shift: Shift) -> bool:
+    """Resolve the event default and optional shift-level override."""
+
+    return shift.goodiebag_is_offered
 
 
 def check_in_assignment(
@@ -79,9 +86,17 @@ def check_in_assignment(
     return checkin
 
 
-def check_out_assignment(db: Session, assignment: ShiftAssignment) -> CheckIn:
+def check_out_assignment(
+    db: Session,
+    assignment: ShiftAssignment,
+    *,
+    goodiebag_received: bool = False,
+) -> CheckIn:
     if assignment.checkin is None or assignment.checkin.checked_in_at is None:
         raise CheckInError("Diese Zuteilung wurde noch nicht eingecheckt.")
+    if goodiebag_received and not goodiebag_is_offered(assignment.shift):
+        raise CheckInError("Für diese Schicht wird kein Goodiebag angeboten.")
+    assignment.checkin.goodiebag_received = goodiebag_received
     assignment.checkin.checked_out_at = utcnow()
     assignment.checkin.materials_returned_at = utcnow()
     for issue in assignment.checkin.material_issues:
