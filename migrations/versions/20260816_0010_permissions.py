@@ -83,7 +83,7 @@ def upgrade() -> None:
             sa.text("SELECT id FROM permissions WHERE name = :name"), {"name": name}
         ).first()
         if result is None:
-            permission_id = bind.execute(
+            bind.execute(
                 sa.text(
                     "INSERT INTO permissions "
                     "(name, display_name, description, is_system, "
@@ -99,12 +99,13 @@ def upgrade() -> None:
                     "created_at": now,
                     "updated_at": now,
                 },
-            ).lastrowid
-            if permission_id is None:
-                permission_id = bind.execute(
-                    sa.text("SELECT id FROM permissions WHERE name = :name"),
-                    {"name": name},
-                ).scalar_one()
+            )
+            # Query through the unique logical key instead of relying on
+            # cursor.lastrowid, which is not available with psycopg 3.
+            permission_id = bind.execute(
+                sa.text("SELECT id FROM permissions WHERE name = :name"),
+                {"name": name},
+            ).scalar_one()
             bind.execute(
                 sa.text(
                     "INSERT INTO permission_mappings "
