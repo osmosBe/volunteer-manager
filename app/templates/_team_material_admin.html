@@ -1,0 +1,26 @@
+<article class="border rounded p-2 mb-2{% if not material.is_active %} text-muted{% endif %}">
+  <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
+    <div>
+      <strong>{{ material.name }}</strong>
+      <span class="small">· {{ material.unit }}{% if material.is_consumable %} · Verbrauch{% endif %}</span>
+    </div>
+    {% if material.checkin_issues %}
+      <span class="badge text-bg-secondary align-self-start" title="Die Ausgabenhistorie muss erhalten bleiben.">bereits ausgegeben</span>
+    {% endif %}
+  </div>
+  <form method="post" action="/admin/materialien/{{ material.id }}">
+    <div class="row g-2">
+      <div class="col-3"><label class="small">Bedarf<input class="form-control form-control-sm" type="number" min="0" name="quantity_required" value="{{ material.quantity_required }}"></label></div>
+      <div class="col-3"><label class="small">Vorhanden<input class="form-control form-control-sm" type="number" min="0" name="quantity_available" value="{{ material.quantity_available }}"></label></div>
+      <div class="col-4"><label class="small">Notiz<input class="form-control form-control-sm" name="notes" value="{{ material.notes or '' }}"></label></div>
+      <div class="col-2"><label class="small d-block"><input type="checkbox" name="is_active" value="true" {% if material.is_active %}checked{% endif %}> aktiv</label><button class="btn btn-sm btn-outline-primary">Speichern</button></div>
+    </div>
+  </form>
+  {% if material.checkin_issues %}
+    <p class="small text-muted mb-0 mt-2">Dieses Material besitzt eine Ausgabenhistorie und kann deshalb nur deaktiviert werden.</p>
+  {% else %}
+    <form class="mt-2" method="post" action="/admin/materialien/{{ material.id }}/loeschen" data-confirm="Material „{{ material.name }}“ wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.">
+      <button class="btn btn-sm btn-outline-danger" type="submit">Material löschen</button>
+    </form>
+  {% endif %}
+</article>

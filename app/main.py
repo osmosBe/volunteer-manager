@@ -16,7 +16,7 @@ from fastapi.responses import (
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -831,6 +831,50 @@ def update_team_material(
     return RedirectResponse(
         url=f"/admin/veranstaltungen/{material.team.event_id}", status_code=303
     )
+
+
+@app.post("/admin/materialien/{material_id}/loeschen", tags=["admin"])
+def delete_unused_team_material(
+    material_id: int,
+    db: Session = db_dependency,
+    admin_user=admin_dependency,
+):
+    material = db.get(TeamMaterial, material_id)
+    if material is None:
+        raise HTTPException(status_code=404, detail="Material nicht gefunden.")
+    if material.checkin_issues:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Bereits ausgegebenes Material kann aus Gründen der "
+                "Nachvollziehbarkeit nicht gelöscht werden. Deaktiviere es stattdessen."
+            ),
+        )
+
+    event_id = material.team.event_id
+    material_name = material.name
+    team_id = material.team_id
+    record_audit(
+        db,
+        action="team_material.deleted",
+        entity_type="team_material",
+        entity_id=material.id,
+        changes={"team_id": team_id, "name": material_name},
+        actor=admin_user.user_id,
+    )
+    db.delete(material)
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Das Material wurde zwischenzeitlich verwendet und kann nicht "
+                "gelöscht werden. Deaktiviere es stattdessen."
+            ),
+        ) from exc
+    return RedirectResponse(url=f"/admin/veranstaltungen/{event_id}", status_code=303)
 
 
 @app.post("/admin/veranstaltungen/{event_id}/schichten", tags=["admin"])
