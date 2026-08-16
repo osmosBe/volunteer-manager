@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "components/form_errors.html" import form_error_summary %}
 {% block content %}
   <h1>SMTP-Einstellungen</h1>
   <p class="alert alert-info">
@@ -6,7 +7,7 @@
     gelesen und niemals in der Datenbank gespeichert oder angezeigt. Speichern
     prüft nur die Konfiguration und versendet keine Nachricht.
   </p>
-  {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+  {{ form_error_summary(error, None, "smtp-errors") }}
   <form class="row g-3" method="post">
     <div class="col-md-8">
       <label class="form-label">SMTP-Host

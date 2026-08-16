@@ -38,6 +38,10 @@ from app.services.volunteers import deterministic_email_hash
 class RegistrationError(ValueError):
     """Raised when a registration cannot safely be accepted."""
 
+    def __init__(self, message: str, field_name: str | None = None):
+        super().__init__(message)
+        self.field_name = field_name
+
 
 ACTIVE_ASSIGNMENT_STATUSES = (
     AssignmentStatus.pending,
@@ -152,9 +156,9 @@ def _validate_event_is_open(event: Event) -> None:
 def _selected_shifts(db: Session, event: Event, shift_ids: list[int]) -> list[Shift]:
     unique_ids = list(dict.fromkeys(shift_ids))
     if not unique_ids:
-        raise RegistrationError("Bitte wähle mindestens eine Schicht aus.")
+        raise RegistrationError("Bitte wähle mindestens eine Schicht aus.", "shift_ids")
     if len(unique_ids) != len(shift_ids):
-        raise RegistrationError("Eine Schicht wurde mehrfach ausgewählt.")
+        raise RegistrationError("Eine Schicht wurde mehrfach ausgewählt.", "shift_ids")
 
     shifts = list(
         db.scalars(
@@ -164,17 +168,20 @@ def _selected_shifts(db: Session, event: Event, shift_ids: list[int]) -> list[Sh
         )
     )
     if len(shifts) != len(unique_ids):
-        raise RegistrationError("Mindestens eine ausgewählte Schicht ist ungültig.")
+        raise RegistrationError(
+            "Mindestens eine ausgewählte Schicht ist ungültig.", "shift_ids"
+        )
     if any(shift.status != ShiftStatus.open for shift in shifts):
         raise RegistrationError(
-            "Mindestens eine ausgewählte Schicht ist nicht mehr offen."
+            "Mindestens eine ausgewählte Schicht ist nicht mehr offen.", "shift_ids"
         )
 
     ordered = sorted(shifts, key=lambda shift: shift.starts_at)
     for previous, current in zip(ordered, ordered[1:], strict=False):
         if _as_utc(previous.ends_at) > _as_utc(current.starts_at):
             raise RegistrationError(
-                "Die ausgewählten Schichten überschneiden sich zeitlich."
+                "Die ausgewählten Schichten überschneiden sich zeitlich.",
+                "shift_ids",
             )
     return ordered
 
@@ -184,7 +191,9 @@ def _assignment_status(db: Session, shift: Shift) -> AssignmentStatus:
         return AssignmentStatus.confirmed
 
     if shift.waitlist_capacity is None:
-        raise RegistrationError(f"Die Schicht „{shift.title}“ ist bereits voll.")
+        raise RegistrationError(
+            f"Die Schicht „{shift.title}“ ist bereits voll.", "shift_ids"
+        )
 
     waitlist_count = (
         db.scalar(
@@ -196,7 +205,9 @@ def _assignment_status(db: Session, shift: Shift) -> AssignmentStatus:
         or 0
     )
     if waitlist_count >= shift.waitlist_capacity:
-        raise RegistrationError(f"Die Warteliste für „{shift.title}“ ist voll.")
+        raise RegistrationError(
+            f"Die Warteliste für „{shift.title}“ ist voll.", "shift_ids"
+        )
     return AssignmentStatus.waitlisted
 
 
@@ -215,23 +226,29 @@ def validate_participant_age(
     event: Event, shifts: list[Shift], birth_date: date | None
 ) -> AgeGroup:
     if birth_date is None:
-        raise RegistrationError("Bitte gib dein Geburtsdatum an.")
+        raise RegistrationError("Bitte gib dein Geburtsdatum an.", "birth_date")
     if birth_date > utcnow().date():
-        raise RegistrationError("Das Geburtsdatum darf nicht in der Zukunft liegen.")
+        raise RegistrationError(
+            "Das Geburtsdatum darf nicht in der Zukunft liegen.", "birth_date"
+        )
     reference_date = event.starts_at.date() if event.starts_at else utcnow().date()
     age = age_on_date(birth_date, reference_date)
     if age < 0:
-        raise RegistrationError("Das Geburtsdatum darf nicht in der Zukunft liegen.")
+        raise RegistrationError(
+            "Das Geburtsdatum darf nicht in der Zukunft liegen.", "birth_date"
+        )
     if age < 18 and not event.allows_minors:
         raise RegistrationError(
-            "Bei dieser Veranstaltung ist eine Teilnahme erst ab 18 Jahren möglich."
+            "Bei dieser Veranstaltung ist eine Teilnahme erst ab 18 Jahren möglich.",
+            "birth_date",
         )
     if age < 18:
         disallowed = [shift.title for shift in shifts if not shift.allows_minors]
         if disallowed:
             raise RegistrationError(
                 "Mindestens eine ausgewählte Schicht ist nicht für unter 18-Jährige "
-                "freigegeben: " + ", ".join(disallowed)
+                "freigegeben: " + ", ".join(disallowed),
+                "shift_ids",
             )
     if age < 16:
         return AgeGroup.under_16
@@ -250,16 +267,16 @@ def create_registration(
     """
     if not data.contact_consent:
         raise RegistrationError(
-            "Bitte stimme der Kontaktaufnahme für diese Veranstaltung zu."
+            "Bitte stimme der Kontaktaufnahme für diese Veranstaltung zu.",
+            "contact_consent",
         )
-    if (
-        not data.first_name.strip()
-        or not data.last_name.strip()
-        or not data.email.strip()
+    for field_name, value, message in (
+        ("first_name", data.first_name, "Bitte gib deinen Vornamen ein."),
+        ("last_name", data.last_name, "Bitte gib deinen Nachnamen ein."),
+        ("email", data.email, "Bitte gib deine E-Mail-Adresse ein."),
     ):
-        raise RegistrationError(
-            "Vorname, Nachname und E-Mail-Adresse sind erforderlich."
-        )
+        if not value.strip():
+            raise RegistrationError(message, field_name)
 
     _validate_event_is_open(event)
     shifts = _selected_shifts(db, event, shift_ids)
@@ -269,7 +286,7 @@ def create_registration(
     try:
         email = validate_email_address(data.email)
     except EmailAddressError as exc:
-        raise RegistrationError(str(exc)) from exc
+        raise RegistrationError(str(exc), "email") from exc
     volunteer = Volunteer(
         event=event,
         first_name=data.first_name.strip(),
@@ -349,16 +366,16 @@ def update_registration(
     """Update contact details and replace the public shift selection safely."""
     if not data.contact_consent:
         raise RegistrationError(
-            "Bitte stimme der Kontaktaufnahme für diese Veranstaltung zu."
+            "Bitte stimme der Kontaktaufnahme für diese Veranstaltung zu.",
+            "contact_consent",
         )
-    if (
-        not data.first_name.strip()
-        or not data.last_name.strip()
-        or not data.email.strip()
+    for field_name, value, message in (
+        ("first_name", data.first_name, "Bitte gib deinen Vornamen ein."),
+        ("last_name", data.last_name, "Bitte gib deinen Nachnamen ein."),
+        ("email", data.email, "Bitte gib deine E-Mail-Adresse ein."),
     ):
-        raise RegistrationError(
-            "Vorname, Nachname und E-Mail-Adresse sind erforderlich."
-        )
+        if not value.strip():
+            raise RegistrationError(message, field_name)
 
     event = db.get(Event, volunteer.event_id)
     if event is None:
@@ -415,7 +432,7 @@ def update_registration(
     try:
         email = validate_email_address(data.email)
     except EmailAddressError as exc:
-        raise RegistrationError(str(exc)) from exc
+        raise RegistrationError(str(exc), "email") from exc
     volunteer.first_name = data.first_name.strip()
     volunteer.last_name = data.last_name.strip()
     volunteer.email = email

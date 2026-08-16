@@ -61,6 +61,45 @@ def test_public_registration_and_cancellation_flow(tmp_path):
             "Zusammenfassung vor dem Absenden"
             in client.get("/veranstaltungen/stpride-test/anmeldung").text
         )
+        valid_form = client.get("/veranstaltungen/stpride-test/anmeldung")
+        assert "data-form-error-summary" not in valid_form.text
+        assert "/static/js/forms.js" in valid_form.text
+        missing_required = client.post(
+            "/veranstaltungen/stpride-test/anmeldung",
+            data={
+                "first_name": "",
+                "last_name": "Muster",
+                "email": "alex@example.org",
+                "birth_date": "1990-01-01",
+                "contact_consent": "true",
+                "shift_ids": str(shift_id),
+            },
+        )
+        assert missing_required.status_code == 422
+        assert "Bitte überprüfe deine Eingaben." in missing_required.text
+        assert 'data-error-for="first_name"' in missing_required.text
+        assert 'href="#first_name"' in missing_required.text
+        assert 'id="first_name"' in missing_required.text
+        assert 'aria-invalid="true"' in missing_required.text
+        assert 'aria-describedby="first_name-error"' in missing_required.text
+        assert 'data-field-error-for="first_name"' in missing_required.text
+        invalid_email = client.post(
+            "/veranstaltungen/stpride-test/anmeldung",
+            data={
+                "first_name": "<script>alert(1)</script>",
+                "last_name": "Muster",
+                "email": "keine-adresse",
+                "birth_date": "1990-01-01",
+                "contact_consent": "true",
+                "shift_ids": str(shift_id),
+            },
+        )
+        assert invalid_email.status_code == 422
+        assert 'data-error-for="email"' in invalid_email.text
+        assert 'href="#email"' in invalid_email.text
+        assert 'aria-describedby="email-help email-error"' in invalid_email.text
+        assert 'value="&lt;script&gt;alert(1)&lt;/script&gt;"' in invalid_email.text
+        assert 'value="<script>alert(1)</script>"' not in invalid_email.text
         invalid = client.post(
             "/veranstaltungen/stpride-test/anmeldung",
             data={
@@ -75,6 +114,8 @@ def test_public_registration_and_cancellation_flow(tmp_path):
         assert invalid.status_code == 422
         assert "Bitte gib ein gültiges Geburtsdatum an." in invalid.text
         assert "data-server-error" in invalid.text
+        assert "Bitte überprüfe deine Eingaben." in invalid.text
+        assert 'data-error-for="birth_date"' in invalid.text
         assert 'name="first_name" value="Alex"' in invalid.text
         assert 'name="last_name" value="Muster"' in invalid.text
         assert 'name="email" value="alex@example.org"' in invalid.text
@@ -130,6 +171,22 @@ def test_public_registration_and_cancellation_flow(tmp_path):
         assert "Alex" in edit.text
         assignment_id = 1
         token = confirmation_url.split("/")[2]
+        invalid_edit = client.post(
+            f"/anmeldung/{token}/bearbeiten",
+            data={
+                "first_name": "Geändert",
+                "last_name": "Muster",
+                "email": "weiterhin-keine-adresse",
+                "birth_date": "1990-01-01",
+                "contact_consent": "true",
+                "shift_ids": str(shift_id),
+            },
+        )
+        assert invalid_edit.status_code == 422
+        assert "Bitte überprüfe deine Eingaben." in invalid_edit.text
+        assert 'data-error-for="email"' in invalid_edit.text
+        assert 'name="first_name" value="Geändert"' in invalid_edit.text
+        assert 'name="email" value="weiterhin-keine-adresse"' in invalid_edit.text
         cancelled = client.post(
             f"/anmeldung/{token}/zuteilungen/{assignment_id}/stornieren",
             follow_redirects=False,

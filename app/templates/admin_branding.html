@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "components/form_errors.html" import form_error_summary %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
   <div>
@@ -8,7 +9,7 @@
   <a class="btn btn-outline-secondary" href="/admin">Zurück</a>
 </div>
 
-{% if error %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endif %}
+{{ form_error_summary(error, None, "branding-errors") }}
 
 <section class="card mb-4">
   <div class="card-body">
@@ -46,7 +47,7 @@
         <p class="text-muted">PNG, JPEG oder geprüftes SVG; maximal {{ max_logo_megabytes }} MB. Rasterbilder werden auf maximal 1600 × 800 Pixel verkleinert und ohne Metadaten neu gespeichert.</p>
         <form method="post" action="/admin/branding/upload" enctype="multipart/form-data">
           <label class="form-label" for="logo_file">Logo-Datei</label>
-          <input class="form-control mb-3" id="logo_file" name="logo_file" type="file" accept="image/png,image/jpeg,image/svg+xml,.png,.jpg,.jpeg,.svg" required>
+          <input class="form-control mb-3" id="logo_file" name="logo_file" type="file" accept="image/png,image/jpeg,image/svg+xml,.png,.jpg,.jpeg,.svg" data-max-file-size="2097152" required>
           <button class="btn btn-primary" type="submit">Logo hochladen</button>
         </form>
       </div>
