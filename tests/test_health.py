@@ -66,7 +66,8 @@ def test_admin_denies_access_in_easyauth_mode_without_headers(monkeypatch) -> No
     response = client.get("/admin")
 
     assert response.status_code == 401
-    assert "Sign in required" in response.text
+    assert "Anmeldung erforderlich" in response.text
+    assert "data-history-back" in response.text
 
 
 def test_admin_allows_access_when_auth_mode_disabled(monkeypatch, tmp_path) -> None:

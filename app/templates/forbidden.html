@@ -1,6 +1,9 @@
 {% extends "base.html" %}
+{% from "components/error_actions.html" import error_actions %}
 {% block content %}
-  <h1>Forbidden</h1>
-  <p>You are signed in, but you are not authorized to access the admin dashboard.</p>
-  <a href="/">Return home</a>
+  <section class="text-center py-5">
+    <h1>Zugriff verweigert</h1>
+    <p class="lead">Du bist angemeldet, besitzt aber nicht die erforderliche Berechtigung.</p>
+    {{ error_actions() }}
+  </section>
 {% endblock %}

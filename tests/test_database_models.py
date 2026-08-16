@@ -351,4 +351,5 @@ def test_admin_db_requires_admin_permission(monkeypatch, tmp_path):
         get_settings.cache_clear()
 
     assert response.status_code == 401
-    assert "Sign in required" in response.text
+    assert "Anmeldung erforderlich" in response.text
+    assert "data-history-back" in response.text
