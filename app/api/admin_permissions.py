@@ -2,16 +2,15 @@
 
 from fastapi import APIRouter, Depends, Form, Request, status
 from fastapi.responses import RedirectResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from app.auth.permissions import require_permission
 from app.database.session import get_db
 from app.services.admin import record_audit
 from app.services.permissions import PermissionRepository, PermissionServiceError
+from app.template_engine import templates
 
 router = APIRouter()
-templates = Jinja2Templates(directory="app/templates")
 admin_dependency = Depends(require_permission("admin"))
 db_dependency = Depends(get_db)
 

@@ -5,7 +5,6 @@ from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile, status
 from fastapi.responses import RedirectResponse, Response
-from fastapi.templating import Jinja2Templates
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -20,9 +19,9 @@ from app.services.branding import (
     branding_source,
     process_logo_upload,
 )
+from app.template_engine import templates
 
 router = APIRouter()
-templates = Jinja2Templates(directory="app/templates")
 strict_admin_dependency = Depends(require_permission("admin"))
 db_dependency = Depends(get_db)
 

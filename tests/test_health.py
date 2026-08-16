@@ -109,7 +109,8 @@ def test_admin_allows_access_when_auth_mode_disabled(monkeypatch, tmp_path) -> N
 
     assert response.status_code == 200
     assert "Volunteer Manager – Admin Dashboard" in response.text
-    assert "Local Developer" in response.text
+    assert "local-dev@example.invalid" not in response.text
+    assert "Local Developer" not in response.text
     assert 'href="/admin/permissions"' in response.text
     assert 'href="/admin/db"' in response.text
     assert 'href="/admin/einstellungen/smtp"' in response.text

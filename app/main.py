@@ -14,7 +14,6 @@ from fastapi.responses import (
     StreamingResponse,
 )
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -24,6 +23,7 @@ from app.api.admin_branding import router as admin_branding_router
 from app.api.admin_mail import router as admin_mail_router
 from app.api.admin_permissions import router as admin_permissions_router
 from app.api.public import router as public_router
+from app.auth.navigation import remember_navigation_permissions
 from app.auth.oidc import begin_login, clear_login, complete_login, oidc_diagnostics
 from app.auth.permissions import (
     has_permission,
@@ -88,9 +88,9 @@ from app.services.mail_templates import (
     ensure_mail_templates,
     unknown_placeholders,
 )
-from app.services.permissions import user_has_permission
 from app.services.qr_codes import qr_svg
 from app.services.volunteers import deterministic_email_hash
+from app.template_engine import templates
 
 admin_dependency = Depends(require_any_permission(["admin", "manager"]))
 checkin_dependency = Depends(require_any_permission(["admin", "manager", "checkin"]))
@@ -98,7 +98,6 @@ strict_admin_dependency = Depends(require_permission("admin"))
 db_dependency = Depends(get_db)
 
 settings = get_settings()
-templates = Jinja2Templates(directory="app/templates")
 logger = logging.getLogger(__name__)
 
 
@@ -2469,11 +2468,30 @@ async def login(request: Request):
 
 
 def authenticated_landing(user, db: Session) -> str:
-    if any(user_has_permission(db, user, name) for name in ("admin", "manager")):
+    permissions = {
+        name
+        for name in ("admin", "manager", "checkin", "police")
+        if has_permission(user, name, db=db)
+    }
+    if permissions & {"admin", "manager"}:
         return "/admin"
-    if user_has_permission(db, user, "checkin"):
+    if "checkin" in permissions:
         return "/admin/check-in"
     return "/"
+
+
+@app.get("/auth/home", tags=["auth"])
+def authenticated_home(request: Request, db: Session = db_dependency):
+    """Resolve the application landing page from database permissions."""
+
+    user = get_current_user(request)
+    if not user:
+        remember_navigation_permissions(request, None, set())
+        return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(
+        url=authenticated_landing(user, db),
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
 
 
 @app.get("/auth/post-login", tags=["auth"])

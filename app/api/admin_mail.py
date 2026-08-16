@@ -5,7 +5,6 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import JSONResponse
-from fastapi.templating import Jinja2Templates
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
@@ -22,9 +21,9 @@ from app.mail.service import (
 )
 from app.mail.status import get_last_test_status, record_test_status
 from app.services.admin import record_audit
+from app.template_engine import templates
 
 router = APIRouter()
-templates = Jinja2Templates(directory="app/templates")
 email_templates = Environment(
     loader=FileSystemLoader("app/templates/email"),
     autoescape=select_autoescape(["html", "xml"]),
