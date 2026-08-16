@@ -3,7 +3,7 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center">
   <h1>Check-in</h1>
-  <a href="/admin">Dashboard</a>
+  {% if navigation.can_use_dashboard %}<a href="/admin">Dashboard</a>{% endif %}
 </div>
 <p class="alert alert-info">
   QR-Code mit der Smartphone-Kamera scannen oder Person hier suchen. Der
