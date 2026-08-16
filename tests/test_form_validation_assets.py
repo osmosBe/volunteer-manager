@@ -15,3 +15,4 @@ def test_shared_form_validation_asset_has_accessible_error_behavior():
     assert "requiredGroup" in source
     assert "maxFileSize" in source
     assert "data-server-error" in source
+    assert "window.confirm" in source

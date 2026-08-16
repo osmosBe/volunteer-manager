@@ -6,7 +6,22 @@ from sqlalchemy.orm import sessionmaker
 from app.database.base import Base
 from app.database.session import create_database_engine, get_db
 from app.main import app
-from app.models import Event, EventStatus, Shift, TeamMaterial, Volunteer
+from app.models import (
+    AgeGroup,
+    AssignmentStatus,
+    AuditLog,
+    CheckInMaterial,
+    Event,
+    EventStatus,
+    Role,
+    Shift,
+    ShiftAssignment,
+    ShiftStatus,
+    Team,
+    TeamMaterial,
+    Volunteer,
+)
+from app.services.volunteers import deterministic_email_hash, normalize_email
 
 
 def test_admin_can_create_plan_edit_and_duplicate_event(tmp_path):
@@ -197,5 +212,122 @@ def test_admin_can_create_plan_edit_and_duplicate_event(tmp_path):
             assert db.get(Event, event_id).allows_minors is True
             assert db.get(Shift, shift_id).title == "Info Früh aktualisiert"
             assert db.get(Shift, shift_id).needed_count == 4
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_admin_can_delete_only_unused_working_materials(tmp_path):
+    engine = create_database_engine(f"sqlite:///{tmp_path / 'delete-material.db'}")
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+    start = datetime.now(timezone.utc) + timedelta(hours=1)
+    with Session() as db:
+        event = Event(
+            name="Materialtest", slug="materialtest", status=EventStatus.ongoing
+        )
+        team = Team(event=event, name="Infobereich")
+        role = Role(team=team, name="Infopoint")
+        used_material = TeamMaterial(
+            team=team,
+            name="Funkgerät",
+            quantity_required=2,
+            quantity_available=2,
+        )
+        unused_material = TeamMaterial(
+            team=team,
+            name="Unbenutzte Box",
+            quantity_required=1,
+            quantity_available=1,
+        )
+        shift = Shift(
+            event=event,
+            role=role,
+            title="Infostand",
+            starts_at=start,
+            ends_at=start + timedelta(hours=2),
+            needed_count=1,
+            status=ShiftStatus.open,
+        )
+        email = "material@example.invalid"
+        volunteer = Volunteer(
+            event=event,
+            first_name="Demo",
+            last_name="Material",
+            email=email,
+            email_normalized=normalize_email(email),
+            email_hash=deterministic_email_hash(email),
+            age_group=AgeGroup.adult,
+        )
+        assignment = ShiftAssignment(
+            volunteer=volunteer,
+            shift=shift,
+            assignment_status=AssignmentStatus.confirmed,
+        )
+        db.add_all(
+            [
+                event,
+                team,
+                role,
+                used_material,
+                unused_material,
+                shift,
+                volunteer,
+                assignment,
+            ]
+        )
+        db.commit()
+        event_id = event.id
+        assignment_id = assignment.id
+        used_material_id = used_material.id
+        unused_material_id = unused_material.id
+
+    def override_get_db():
+        with Session() as db:
+            yield db
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        client = TestClient(app)
+        assert (
+            client.post(
+                f"/admin/check-in/{assignment_id}",
+                data={"material_ids": str(used_material_id)},
+                follow_redirects=False,
+            ).status_code
+            == 303
+        )
+        page = client.get(f"/admin/veranstaltungen/{event_id}")
+        assert page.status_code == 200
+        assert f"/admin/materialien/{unused_material_id}/loeschen" in page.text
+        assert f"/admin/materialien/{used_material_id}/loeschen" not in page.text
+        assert "besitzt eine Ausgabenhistorie" in page.text
+        assert 'data-confirm="Material „Unbenutzte Box“ wirklich löschen?' in page.text
+
+        blocked = client.post(
+            f"/admin/materialien/{used_material_id}/loeschen",
+            follow_redirects=False,
+        )
+        assert blocked.status_code == 409
+        assert "Nachvollziehbarkeit" in blocked.json()["detail"]
+
+        deleted = client.post(
+            f"/admin/materialien/{unused_material_id}/loeschen",
+            follow_redirects=False,
+        )
+        assert deleted.status_code == 303
+        assert deleted.headers["location"] == f"/admin/veranstaltungen/{event_id}"
+        assert (
+            client.post(
+                "/admin/materialien/999999/loeschen", follow_redirects=False
+            ).status_code
+            == 404
+        )
+        with Session() as db:
+            assert db.get(TeamMaterial, unused_material_id) is None
+            assert db.get(TeamMaterial, used_material_id) is not None
+            assert db.query(CheckInMaterial).count() == 1
+            audit = db.query(AuditLog).filter_by(action="team_material.deleted").one()
+            assert audit.entity_id == str(unused_material_id)
+            assert "Unbenutzte Box" in audit.metadata_json
     finally:
         app.dependency_overrides.clear()

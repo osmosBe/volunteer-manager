@@ -281,9 +281,14 @@
       this.form.addEventListener("submit", (event) => {
         for (const item of this.items()) this.touched.add(item.name);
         const errors = this.validate(true);
-        if (!errors.length) return;
-        event.preventDefault();
-        this.summary.focus();
+        if (errors.length) {
+          event.preventDefault();
+          this.summary.focus();
+          return;
+        }
+        if (this.form.dataset.confirm && !window.confirm(this.form.dataset.confirm)) {
+          event.preventDefault();
+        }
       });
     }
   }
