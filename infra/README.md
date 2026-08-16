@@ -52,6 +52,12 @@ az deployment group create \
 Review `az deployment group what-if` before applying to an existing Resource
 Group. The template does not delete Azure Files, existing OIDC or GitHub state.
 
+`demoMode` defaults to `false`; the checked-in DEV parameter file sets it to
+`true`. The DEV deployment workflow also enforces the corresponding
+`DEMO_MODE` Container App environment value (and accepts an explicit GitHub
+Environment variable set to `false`) so existing environments receive the
+same visible warning without an infrastructure redeployment.
+
 Mail parameters default to a non-sending open-source installation:
 
 ```text

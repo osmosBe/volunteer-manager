@@ -130,6 +130,16 @@ app.add_middleware(
     https_only=settings.app_base_url.lower().startswith("https://"),
     max_age=8 * 60 * 60,
 )
+
+
+@app.middleware("http")
+async def expose_runtime_mode(request: Request, call_next):
+    """Expose safe runtime presentation state to every HTML template."""
+
+    request.state.demo_mode = get_settings().demo_mode
+    return await call_next(request)
+
+
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 app.include_router(public_router)
 app.include_router(admin_branding_router)
@@ -2429,6 +2439,7 @@ def debug_config():
             "auth_mode": settings.auth_mode,
             "database_provider": safe_database_diagnostics()["database_type"],
             "app_base_url_configured": bool(settings.app_base_url),
+            "demo_mode": settings.demo_mode,
         }
     )
 

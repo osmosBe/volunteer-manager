@@ -40,6 +40,9 @@ param bootstrapImage string = 'mcr.microsoft.com/azuredocs/containerapps-hellowo
 @description('Create a storage account for future files/exports. It is not used for the database.')
 param deployStorage bool = true
 
+@description('Show a global warning that the application is running in demo mode.')
+param demoMode bool = false
+
 @description('Transactional mail provider. Console performs no external delivery.')
 @allowed([
   'console'
@@ -156,6 +159,7 @@ module containerApp 'modules/container-app.bicep' = if (empty(existingContainerA
     registryUsername: registryCredentials.username
     registryPassword: registryCredentials.passwords[0].value
     databaseUrl: databaseUrl
+    demoMode: demoMode
     mailProvider: mailProvider
     mailFromAddress: mailFromAddress
     mailFromName: mailFromName

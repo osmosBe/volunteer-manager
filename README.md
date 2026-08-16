@@ -83,7 +83,7 @@ That separation keeps the same application image usable in Azure Container Apps,
 - Safe liveness, readiness, database, authentication, and mail diagnostics
 - PostgreSQL and SQLite schema management through the same Alembic history
 
-Demo data is fictional, uses only `example.invalid` addresses, and is never enabled by default outside the development deployment.
+Demo data is fictional, uses only `example.invalid` addresses, and is never enabled by default outside the development deployment. Set `DEMO_MODE=true` to show a prominent warning on every HTML page. This visual mode is deliberately independent from `SEED_DEMO_DATA`: the former labels an environment, while the latter changes database contents.
 
 ## Architecture
 
@@ -148,6 +148,14 @@ Optional fictional demo data:
 ```bash
 python -m scripts.seed_default_event
 ```
+
+To mark a local installation visibly as a demo without changing its data:
+
+```dotenv
+DEMO_MODE=true
+```
+
+Never use the banner as a security boundary. It is presentation-only; authentication, authorization, mail delivery, and data retention continue to follow their normal configuration.
 
 Useful checks:
 

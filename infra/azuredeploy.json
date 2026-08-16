@@ -4,8 +4,8 @@
   "metadata": {
     "_generator": {
       "name": "bicep",
-      "version": "0.45.15.27210",
-      "templateHash": "2651574893723943039"
+      "version": "0.46.1.21595",
+      "templateHash": "17146352788328915795"
     }
   },
   "parameters": {
@@ -89,6 +89,13 @@
       "defaultValue": true,
       "metadata": {
         "description": "Create a storage account for future files/exports. It is not used for the database."
+      }
+    },
+    "demoMode": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Show a global warning that the application is running in demo mode."
       }
     },
     "mailProvider": {
@@ -201,8 +208,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.45.15.27210",
-              "templateHash": "11156981330022590583"
+              "version": "0.46.1.21595",
+              "templateHash": "11855528639314534612"
             }
           },
           "parameters": {
@@ -296,8 +303,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.45.15.27210",
-              "templateHash": "12967135406056492474"
+              "version": "0.46.1.21595",
+              "templateHash": "8239336571524655746"
             }
           },
           "parameters": {
@@ -404,8 +411,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.45.15.27210",
-              "templateHash": "5749726186918318592"
+              "version": "0.46.1.21595",
+              "templateHash": "15617324729325758112"
             }
           },
           "parameters": {
@@ -517,8 +524,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.45.15.27210",
-              "templateHash": "8306253566422810373"
+              "version": "0.46.1.21595",
+              "templateHash": "7805915510002273601"
             }
           },
           "parameters": {
@@ -680,8 +687,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.45.15.27210",
-              "templateHash": "11978242473070927576"
+              "version": "0.46.1.21595",
+              "templateHash": "2153273942884665265"
             }
           },
           "parameters": {
@@ -773,6 +780,9 @@
           "databaseUrl": {
             "value": "[format('postgresql+psycopg://{0}:{1}@{2}:5432/{3}?sslmode=require', parameters('postgresqlAdministratorLogin'), uriComponent(parameters('postgresqlAdministratorPassword')), reference(resourceId('Microsoft.Resources/deployments', 'postgresql'), '2025-04-01').outputs.fullyQualifiedDomainName.value, reference(resourceId('Microsoft.Resources/deployments', 'postgresql'), '2025-04-01').outputs.databaseName.value)]"
           },
+          "demoMode": {
+            "value": "[parameters('demoMode')]"
+          },
           "mailProvider": {
             "value": "[parameters('mailProvider')]"
           },
@@ -807,8 +817,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.45.15.27210",
-              "templateHash": "1360922842366843868"
+              "version": "0.46.1.21595",
+              "templateHash": "13063645488486215174"
             }
           },
           "parameters": {
@@ -858,6 +868,13 @@
               "type": "securestring",
               "metadata": {
                 "description": "SQLAlchemy PostgreSQL URL stored only as a Container App secret."
+              }
+            },
+            "demoMode": {
+              "type": "bool",
+              "defaultValue": false,
+              "metadata": {
+                "description": "Show the global demo-mode warning in the application UI."
               }
             },
             "mailProvider": {
@@ -957,7 +974,7 @@
                     {
                       "name": "volunteer-manager",
                       "image": "[parameters('image')]",
-                      "env": "[concat(createArray(createObject('name', 'DATABASE_URL', 'secretRef', 'database-url'), createObject('name', 'ENVIRONMENT', 'value', 'development'), createObject('name', 'AUTH_MODE', 'value', 'easyauth'), createObject('name', 'SEED_DEMO_DATA', 'value', 'false'), createObject('name', 'MAIL_PROVIDER', 'value', parameters('mailProvider')), createObject('name', 'MAIL_FROM_ADDRESS', 'value', parameters('mailFromAddress')), createObject('name', 'MAIL_FROM_NAME', 'value', parameters('mailFromName')), createObject('name', 'MAIL_REPLY_TO', 'value', parameters('mailReplyTo')), createObject('name', 'M365_TENANT_ID', 'value', parameters('m365TenantId')), createObject('name', 'M365_CLIENT_ID', 'value', parameters('m365ClientId')), createObject('name', 'M365_AUTH_MODE', 'value', parameters('m365AuthMode'))), if(empty(parameters('m365ClientSecret')), createArray(), createArray(createObject('name', 'M365_CLIENT_SECRET', 'secretRef', 'm365-client-secret'))))]",
+                      "env": "[concat(createArray(createObject('name', 'DATABASE_URL', 'secretRef', 'database-url'), createObject('name', 'ENVIRONMENT', 'value', 'development'), createObject('name', 'AUTH_MODE', 'value', 'easyauth'), createObject('name', 'SEED_DEMO_DATA', 'value', 'false'), createObject('name', 'DEMO_MODE', 'value', string(parameters('demoMode'))), createObject('name', 'MAIL_PROVIDER', 'value', parameters('mailProvider')), createObject('name', 'MAIL_FROM_ADDRESS', 'value', parameters('mailFromAddress')), createObject('name', 'MAIL_FROM_NAME', 'value', parameters('mailFromName')), createObject('name', 'MAIL_REPLY_TO', 'value', parameters('mailReplyTo')), createObject('name', 'M365_TENANT_ID', 'value', parameters('m365TenantId')), createObject('name', 'M365_CLIENT_ID', 'value', parameters('m365ClientId')), createObject('name', 'M365_AUTH_MODE', 'value', parameters('m365AuthMode'))), if(empty(parameters('m365ClientSecret')), createArray(), createArray(createObject('name', 'M365_CLIENT_SECRET', 'secretRef', 'm365-client-secret'))))]",
                       "resources": {
                         "cpu": "[json('0.5')]",
                         "memory": "1Gi"
@@ -1038,8 +1055,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.45.15.27210",
-              "templateHash": "12995207105709766429"
+              "version": "0.46.1.21595",
+              "templateHash": "17925520124059182582"
             }
           },
           "parameters": {
