@@ -242,7 +242,9 @@ def admin_dashboard(
         events = []
         event_stats = {}
         dashboard_error = "Die Datenbank ist derzeit nicht erreichbar."
-    can_manage_permissions = user_has_permission(db, admin_user, "admin")
+    # Use the public authorization wrapper so AUTH_MODE=disabled keeps its
+    # documented local-developer access instead of hiding strict-admin links.
+    can_manage_permissions = has_permission(admin_user, "admin", db=db)
     return templates.TemplateResponse(
         "admin_dashboard.html",
         {

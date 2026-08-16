@@ -189,6 +189,9 @@ def test_route_permission_matrix(permission_app):
         "/admin/mail",
     ):
         assert client.get(path, headers=admin).status_code == 200, path
+    admin_dashboard = client.get("/admin", headers=admin)
+    assert 'href="/admin/permissions"' in admin_dashboard.text
+    assert 'href="/admin/db"' in admin_dashboard.text
 
     manager_dashboard = client.get("/admin", headers=manager)
     assert manager_dashboard.status_code == 200
