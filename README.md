@@ -161,6 +161,13 @@ administration dashboard. The bundled fallback logo is
 `app/static/images/logo.png`; administrators can still replace it through the
 database-backed Branding page.
 
+Optional privacy and imprint links are also stored in the application database.
+Administrators configure them under `/admin/einstellungen/rechtliches`. Each
+target must be either an external `https://` URL or an intentional
+application-relative path beginning with `/`; leaving a field empty hides that
+link in the global footer. No organization URL is built into the application,
+and changes are recorded in the audit log without storing the complete target.
+
 Never use the banner as a security boundary. It is presentation-only; authentication, authorization, mail delivery, and data retention continue to follow their normal configuration.
 
 Useful checks:

@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.api.admin_branding import router as admin_branding_router
+from app.api.admin_legal import router as admin_legal_router
 from app.api.admin_mail import router as admin_mail_router
 from app.api.admin_permissions import router as admin_permissions_router
 from app.api.public import router as public_router
@@ -144,6 +145,7 @@ async def expose_runtime_presentation(request: Request, call_next):
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 app.include_router(public_router)
 app.include_router(admin_branding_router)
+app.include_router(admin_legal_router)
 app.include_router(admin_mail_router)
 app.include_router(admin_permissions_router)
 
