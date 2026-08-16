@@ -53,6 +53,21 @@ Assignments are status-driven instead of hard-deleted. Anonymization removes
 personal data and edit access irreversibly while preserving staffing history.
 Relevant administrative changes are recorded in the audit log.
 
+## Branding assets are portable database state
+
+The bundled logo remains the immutable fallback inside the application image.
+An administrator can configure a render-only HTTP(S) URL or upload a small,
+validated logo. Uploaded bytes live in the application database rather than the
+container filesystem so the same feature survives revisions and works with
+SQLite, PostgreSQL, Docker Compose, Azure Container Apps and Kubernetes without
+a second storage dependency. The 2 MB limit keeps this singleton BLOB
+operationally modest.
+
+The server does not proxy or cache remote URLs because that would introduce an
+SSRF-capable fetcher. Browsers load and cache the remote asset and fall back to
+the bundled logo on failure. Raster uploads are re-encoded; SVG is accepted only
+after strict active-content and external-resource validation.
+
 ## Open points for the next phase
 
 - Replace PostgreSQL password authentication with managed identity/Entra auth

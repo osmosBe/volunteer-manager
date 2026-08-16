@@ -21,6 +21,7 @@ run `scripts/bootstrap.ps1` afterwards.
 - Bulk status/briefing actions, controlled rejection and waiting-list promotion
 - Mobile and QR check-in, material issue/return tracking and print views
 - Search, filters, CSV exports, audit records, mail templates, SMTP and outbox
+- Database-backed application branding with a default, remote or uploaded logo
 - Microsoft Entra EasyAuth integration without a second application login system
 - Health, readiness and safe database/migration diagnostics
 
@@ -630,6 +631,30 @@ URI and `AUTH_MODE=easyauth`. Alembic seeds the initial `Volunteer.Admin` App
 Role mapping; later mappings are maintained in `/admin/permissions`.
 `/debug/easyauth` is available only with `DEBUG=true` and does not expose access
 tokens.
+
+## Application branding
+
+Administrators can manage the application logo at `/admin/branding`. Branding
+is stored in the application database and therefore works identically with
+SQLite and PostgreSQL. It requires no writable container filesystem, Azure
+Files or image rebuild. The admin can choose exactly one override:
+
+- an HTTP(S) logo URL, rendered by the browser with the bundled logo as an
+  automatic load-error fallback; or
+- a PNG, JPEG or strictly validated SVG upload of at most 2 MB.
+
+Raster uploads are decoded, stripped of metadata, resized to at most
+1600 × 800 pixels and re-encoded before storage. SVG uploads reject scripts,
+event handlers, embedded active elements, DTD/entities and external resources.
+The rendered logo also has fixed maximum display dimensions so it cannot break
+the layout. Resetting removes the override and immediately restores
+`app/static/images/st-pride-logo.png`.
+
+Remote logo URLs are never fetched by the application server. This avoids an
+SSRF path; normal browser caching still applies to the remote asset. Private or
+local IP literals, `localhost`, credentials in URLs and non-HTTP(S) schemes are
+rejected. Logo URL, upload and reset changes are admin-only and audited without
+storing uploaded content or URL query parameters in the audit log.
 
 ## Quality gates
 

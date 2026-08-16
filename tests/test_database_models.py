@@ -25,6 +25,7 @@ from app.models import (
     AssignmentSource,
     AssignmentStatus,
     AuditLog,
+    BrandingSettings,
     Briefing,
     BriefingConfirmation,
     CheckIn,
@@ -129,7 +130,7 @@ def test_database_diagnostics_handles_uninitialized_schema(tmp_path):
         "database_reachable": True,
         "schema_initialized": False,
         "current_revision": None,
-        "expected_revision": "20260816_0010",
+        "expected_revision": "20260816_0011",
         "migration_pending": True,
         "tables": {"events": False, "volunteers": False, "shifts": False},
         "diagnostic_error": None,
@@ -194,8 +195,17 @@ def test_initial_migration_creates_tables(tmp_path):
         "briefings",
         "briefing_confirmations",
         "outbox_messages",
+        "permissions",
+        "permission_mappings",
+        "branding_settings",
         "alembic_version",
     }.issubset(table_names)
+    Session = sessionmaker(bind=engine)
+    with Session() as db:
+        branding = db.get(BrandingSettings, 1)
+        assert branding is not None
+        assert branding.logo_url is None
+        assert branding.logo_data is None
 
 
 def test_default_event_seed_is_idempotent(tmp_path):

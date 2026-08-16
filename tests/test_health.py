@@ -92,6 +92,7 @@ def test_admin_allows_access_when_auth_mode_disabled(monkeypatch, tmp_path) -> N
     assert 'href="/admin/permissions"' in response.text
     assert 'href="/admin/db"' in response.text
     assert 'href="/admin/einstellungen/smtp"' in response.text
+    assert 'href="/admin/branding"' in response.text
 
 
 def test_easyauth_principal_parser_handles_valid_client_principal() -> None:
@@ -184,7 +185,7 @@ def test_debug_db_returns_safe_schema_diagnostics(monkeypatch, tmp_path) -> None
         "database_reachable": True,
         "schema_initialized": False,
         "current_revision": None,
-        "expected_revision": "20260816_0010",
+        "expected_revision": "20260816_0011",
         "migration_pending": True,
         "tables": {"events": False, "volunteers": False, "shifts": False},
         "diagnostic_error": None,
@@ -201,7 +202,7 @@ def test_admin_db_returns_200_when_database_is_unavailable(monkeypatch) -> None:
             "database_reachable": False,
             "schema_initialized": False,
             "current_revision": None,
-            "expected_revision": "20260816_0010",
+            "expected_revision": "20260816_0011",
             "migration_pending": None,
             "tables": {"events": False, "volunteers": False, "shifts": False},
             "diagnostic_error": "database_unreachable",
