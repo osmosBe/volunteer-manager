@@ -10,6 +10,7 @@ from datetime import date, datetime, timezone
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     ForeignKey,
@@ -606,3 +607,41 @@ class AuditLog(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
     )
+
+
+class Permission(TimestampMixin, Base):
+    __tablename__ = "permissions"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(
+        String(80), nullable=False, unique=True, index=True
+    )
+    display_name: Mapped[str] = mapped_column(String(160), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    is_system: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    mappings: Mapped[list["PermissionMapping"]] = relationship(
+        back_populates="permission", cascade="all, delete-orphan"
+    )
+
+
+class PermissionMapping(TimestampMixin, Base):
+    __tablename__ = "permission_mappings"
+    __table_args__ = (
+        CheckConstraint(
+            "mapping_type IN ('role', 'group', 'email')",
+            name="ck_permission_mapping_type",
+        ),
+        UniqueConstraint(
+            "permission_id",
+            "mapping_type",
+            "mapping_value",
+            name="uq_permission_mapping_value",
+        ),
+    )
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    permission_id: Mapped[int] = mapped_column(
+        ForeignKey("permissions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    mapping_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    mapping_value: Mapped[str] = mapped_column(String(255), nullable=False)
+    display_label: Mapped[str | None] = mapped_column(String(255))
+    permission: Mapped[Permission] = relationship(back_populates="mappings")

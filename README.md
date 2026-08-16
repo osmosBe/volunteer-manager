@@ -52,6 +52,97 @@ psycopg 3. SQLite PRAGMAs are applied only to SQLite connections. Importing the
 application does not connect to a database, create schema objects or run
 migrations.
 
+## Portable deployment and authentication
+
+The same image supports Azure Container Apps, Docker Compose and Kubernetes.
+Azure is a configuration target, not an application dependency.
+
+| Scenario | Authentication | Database |
+| --- | --- | --- |
+| Simple self-hosted | Generic OIDC | SQLite, one application replica |
+| Production self-hosted / Kubernetes | Generic OIDC | PostgreSQL |
+| Azure Container Apps | Entra EasyAuth | PostgreSQL Flexible Server |
+
+`AUTH_MODE=easyauth` preserves the existing Azure EasyAuth adapter and requires
+no generic OIDC credentials. `AUTH_MODE=oidc` uses standards-based OpenID Connect
+Authorization Code Flow. `AUTH_MODE=disabled` is for local development and CI
+only; never expose it to an untrusted network. Outside development/test it
+requires the explicit `ALLOW_INSECURE_AUTH=true` opt-in.
+
+All adapters produce the same `AuthenticatedUser` model. The database-backed
+permission engine consumes only roles, groups and email, so `Volunteer.Admin`
+has the same meaning with EasyAuth, Authentik, Keycloak, Zitadel, direct Entra
+OIDC, or another conforming provider.
+
+### Generic OIDC
+
+OIDC discovery uses `{OIDC_ISSUER_URL}/.well-known/openid-configuration`.
+Authorization Code Flow includes state, nonce and PKCE validation. Tokens exist
+only during the callback and are never passed to templates, diagnostics or logs;
+the signed HttpOnly, `SameSite=Lax` cookie retains only an opaque local session
+identifier. With an HTTPS `APP_BASE_URL`, the cookie is also marked `Secure`.
+
+```dotenv
+AUTH_MODE=oidc
+APP_BASE_URL=https://volunteer.example.org
+SESSION_SECRET=<long-random-secret>
+OIDC_ISSUER_URL=https://auth.example.org/application/o/volunteer/
+OIDC_CLIENT_ID=<client-id>
+OIDC_CLIENT_SECRET=<client-secret>
+OIDC_SCOPES="openid profile email"
+OIDC_ROLE_CLAIMS="roles,realm_access.roles"
+OIDC_GROUP_CLAIMS="groups"
+```
+
+Set the provider redirect URI to `<APP_BASE_URL>/auth/callback`. Identity claims
+default to `sub`, `name`, and `email,preferred_username`; dotted paths such as
+`realm_access.roles` support common nested claims without provider-specific code.
+
+OIDC login transactions and authenticated sessions are server-side and
+process-local; the cookie contains only an opaque identifier. Run one application
+replica per OIDC deployment for now. Horizontal scaling requires a shared
+server-side session store and is a deliberate follow-up milestone; PostgreSQL
+data portability alone does not make login sessions multi-replica safe.
+
+### Docker Compose: SQLite
+
+Copy `.env.example` to a protected `.env`, configure OIDC, then run:
+
+```bash
+docker compose -f deploy/docker-compose.sqlite.yml run --rm volunteer-manager alembic upgrade head
+docker compose -f deploy/docker-compose.sqlite.yml up -d --build
+```
+
+SQLite persists at `/data/volunteer.db` in a named Docker volume. It supports one
+application replica only. Do not use SMB, NFS, Azure Files or any network
+filesystem, and do not horizontally scale this edition.
+
+### Docker Compose: PostgreSQL
+
+Set a strong raw `POSTGRES_PASSWORD`, an URL-encoded `DATABASE_URL` using the
+Compose hostname `postgres`, and OIDC configuration in `.env`:
+
+```dotenv
+POSTGRES_PASSWORD=<strong-raw-password>
+DATABASE_URL=postgresql+psycopg://volunteer:<url-encoded-password>@postgres:5432/volunteer
+```
+
+```bash
+docker compose -f deploy/docker-compose.postgres.yml run --rm volunteer-manager alembic upgrade head
+docker compose -f deploy/docker-compose.postgres.yml up -d --build
+```
+
+Migrations are always explicit; the web container never runs them at startup.
+`.env` is gitignored and must be protected as a production secret.
+
+### Backups
+
+For SQLite use SQLite's online backup API (for example `sqlite3
+/data/volunteer.db '.backup /backup/volunteer.db'`) or stop the container before
+copying it—never blindly copy an actively written database. For PostgreSQL use a
+consistent `pg_dump`, e.g. `pg_dump -Fc -h <host> -U <user> volunteer > volunteer.dump`.
+Test restores, not just backups.
+
 ## Local development
 
 Requirements: Python 3.13 (the code remains compatible with the current local
@@ -72,15 +163,9 @@ To add fictional local data after migrating:
 python -m scripts.seed_default_event
 ```
 
-With Docker Compose, the one-shot `migrate` service upgrades the local SQLite
-volume before the web service starts:
-
-```bash
-docker compose up --build
-```
-
-The web container itself only runs Uvicorn. It never migrates or seeds a database
-on startup.
+With Docker Compose, run the documented one-shot `alembic upgrade head` command
+before starting or upgrading the web service. The web container itself only runs
+Uvicorn. It never migrates or seeds a database on startup.
 
 ## Azure quick start for a new fork
 
@@ -219,10 +304,11 @@ permitted administrator and exits without attempting privilege escalation.
 
 ### 4. Configure Entra EasyAuth
 
-Configure Microsoft Entra authentication on the Container App and set the
-application allowlists (`ADMIN_ALLOWED_EMAILS` and/or
-`ADMIN_ALLOWED_GROUP_IDS`). The application consumes trusted EasyAuth headers;
-do not add a parallel password login.
+Configure Microsoft Entra authentication on the Container App and assign the
+appropriate App Roles (initially `Volunteer.Admin`, `Volunteer.Manager`,
+`Volunteer.CheckIn`, or the reserved `Volunteer.Police`). The application
+consumes trusted EasyAuth headers and resolves them through database mappings;
+do not add a parallel password login or environment-based authorization list.
 
 `AUTH_MODE=disabled` is for isolated local development only. Shared DEV and
 production environments should use `AUTH_MODE=easyauth`.
@@ -540,10 +626,32 @@ an HTTP 200 from an older revision is not considered success.
 ### EasyAuth failures
 
 Confirm the Container App authentication provider, issuer/audience, redirect
-URI, `AUTH_MODE=easyauth`, and admin email/group allowlists. `/debug/easyauth`
-is available only with `DEBUG=true` and does not expose access tokens.
+URI and `AUTH_MODE=easyauth`. Alembic seeds the initial `Volunteer.Admin` App
+Role mapping; later mappings are maintained in `/admin/permissions`.
+`/debug/easyauth` is available only with `DEBUG=true` and does not expose access
+tokens.
 
 ## Quality gates
+
+## Permission management
+
+Authorization mappings are stored only in the application database. The former
+`config/permissions.yaml` file has been removed. Alembic creates the four system
+permissions during deployment without overwriting later administrator changes:
+
+- `admin`: full administration, including permission and technical diagnostics
+- `manager`: all current operational application access except database
+  diagnostics, SMTP configuration and permission management
+- `checkin`: only event-day check-in, QR scan and check-in/check-out work
+- `police`: reserved placeholder; it grants no current route access
+
+Each permission can map an App Role, group object ID, or normalized email.
+App Roles are preferred; group UUIDs are authoritative while their optional
+labels are informational only. Email is an emergency/fallback path. A match on
+any mapping grants access; database errors, missing permissions and empty
+mappings deny access. The last `admin` mapping cannot be removed. Permission
+changes are audited and are managed at `/admin/permissions` by administrators
+only. No YAML file is read or written by runtime authorization.
 
 Run before integration:
 

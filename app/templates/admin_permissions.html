@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center gap-3 mb-3">
+  <div>
+    <h1 class="mb-1">Berechtigungen</h1>
+    <p class="text-muted mb-0">Rollen, Gruppen-Objekt-IDs und Notfall-E-Mail-Zuordnungen werden ausschließlich in der Datenbank verwaltet.</p>
+  </div>
+  <a class="btn btn-outline-secondary" href="/admin">Zurück</a>
+</div>
+
+<div id="permission-error-summary" class="alert alert-danger{% if not error %} d-none{% endif %}" role="alert" aria-live="polite">
+  {{ error or "Bitte korrigiere die markierten Eingaben." }}
+</div>
+
+{% for permission in permissions %}
+<section class="card mb-4">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-start gap-3">
+      <div><h2 class="h4 mb-1">{{ permission.display_name }}</h2><code>{{ permission.name }}</code></div>
+      {% if permission.is_system %}<span class="badge text-bg-secondary">Systemberechtigung</span>{% endif %}
+    </div>
+
+    <form method="post" action="/admin/permissions/{{ permission.name }}" class="row g-3 my-2 permission-form">
+      <div class="col-md-4">
+        <label class="form-label">Anzeigename
+          <input class="form-control" name="display_name" value="{{ permission.display_name }}" required>
+        </label>
+      </div>
+      <div class="col-md-8">
+        <label class="form-label">Beschreibung
+          <input class="form-control" name="description" value="{{ permission.description or '' }}">
+        </label>
+      </div>
+      <div class="col-12"><button class="btn btn-outline-primary" type="submit">Metadaten speichern</button></div>
+    </form>
+
+    <h3 class="h5 mt-4">Zuordnungen</h3>
+    {% if permission.mappings %}
+    <div class="table-responsive">
+      <table class="table align-middle">
+        <thead><tr><th>Typ</th><th>Technischer Wert</th><th>Anzeigename</th><th>Aktionen</th></tr></thead>
+        <tbody>
+        {% for mapping in permission.mappings %}
+          <tr>
+            <td>{{ mapping.mapping_type }}</td>
+            <td><code>{{ mapping.mapping_value }}</code></td>
+            <td>
+              <form class="d-flex gap-2 permission-form" method="post" action="/admin/permissions/mappings/{{ mapping.id }}">
+                <input class="form-control form-control-sm" name="display_label" value="{{ mapping.display_label or '' }}" aria-label="Anzeigename für {{ mapping.mapping_value }}">
+                <button class="btn btn-sm btn-outline-primary" type="submit">Speichern</button>
+              </form>
+            </td>
+            <td>
+              <form method="post" action="/admin/permissions/mappings/{{ mapping.id }}/remove">
+                <button class="btn btn-sm btn-outline-danger" type="submit">Entfernen</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}<p class="alert alert-warning">Keine Zuordnung – diese Berechtigung wird fail-closed verweigert.</p>{% endif %}
+
+    <form method="post" action="/admin/permissions/{{ permission.name }}/mappings" class="row g-3 permission-form mapping-form">
+      <div class="col-md-3">
+        <label class="form-label">Typ
+          <select class="form-select mapping-type" name="mapping_type">
+            <option value="role">Rolle</option>
+            <option value="group">Gruppe</option>
+            <option value="email">E-Mail</option>
+          </select>
+        </label>
+      </div>
+      <div class="col-md-5">
+        <label class="form-label">Technischer Wert
+          <input class="form-control mapping-value" name="mapping_value" required placeholder="Volunteer.Admin">
+        </label>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Optionaler Anzeigename
+          <input class="form-control" name="display_label" placeholder="z. B. Entra Administrators">
+        </label>
+      </div>
+      <div class="col-12"><button class="btn btn-primary" type="submit">Zuordnung hinzufügen</button></div>
+    </form>
+  </div>
+</section>
+{% endfor %}
+
+<script>
+(() => {
+  const summary = document.getElementById("permission-error-summary");
+  const configure = (form) => {
+    const type = form.querySelector(".mapping-type");
+    const value = form.querySelector(".mapping-value");
+    if (!type || !value) return;
+    const apply = () => {
+      value.type = type.value === "email" ? "email" : "text";
+      value.pattern = type.value === "group" ? "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}" : "";
+      value.placeholder = type.value === "group" ? "00000000-0000-0000-0000-000000000000" : (type.value === "email" ? "admin@example.org" : "Volunteer.Admin");
+      value.setCustomValidity("");
+    };
+    type.addEventListener("change", apply);
+    value.addEventListener("input", () => { value.setCustomValidity(""); summary.classList.add("d-none"); });
+    apply();
+  };
+  document.querySelectorAll(".mapping-form").forEach(configure);
+  document.querySelectorAll(".permission-form").forEach((form) => form.addEventListener("submit", (event) => {
+    if (!form.checkValidity()) {
+      event.preventDefault();
+      summary.textContent = "Bitte korrigiere die markierten Eingaben.";
+      summary.classList.remove("d-none");
+      form.classList.add("was-validated");
+    }
+  }));
+})();
+</script>
+{% endblock %}
