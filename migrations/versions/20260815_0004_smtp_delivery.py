@@ -27,7 +27,7 @@ def upgrade() -> None:
         sa.Column(
             "from_name",
             sa.String(255),
-            server_default="ST. PRIDE Volunteer Management",
+            server_default="Volunteer Manager",
             nullable=False,
         ),
         sa.Column(

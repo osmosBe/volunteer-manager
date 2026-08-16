@@ -49,7 +49,7 @@ DEFAULT_TEMPLATES = (
             "Hallo {first_name},\n\n"
             "deine Anmeldung für {event_name} wurde erfasst. Bitte bestätige "
             "deine E-Mail-Adresse:\n{verification_url}\n\n"
-            "Deine Anmeldung verwalten:\n{edit_url}\n\nST. PRIDE"
+            "Deine Anmeldung verwalten:\n{edit_url}\n\nDein Veranstaltungsteam"
         ),
         delivery_mode=AUTOMATIC,
     ),
@@ -63,7 +63,7 @@ DEFAULT_TEMPLATES = (
             "bitte bestätige deine neue E-Mail-Adresse für {event_name}:\n"
             "{verification_url}\n\n"
             "Dein bestätigter Anmelde- und Schichtstatus bleibt unverändert."
-            "\n\nST. PRIDE"
+            "\n\nDein Veranstaltungsteam"
         ),
         delivery_mode=AUTOMATIC,
     ),
@@ -75,7 +75,7 @@ DEFAULT_TEMPLATES = (
         body=(
             "Hallo {first_name},\n\n"
             "deine Kontaktdaten oder Schichten für {event_name} wurden "
-            "aktualisiert.\n\nST. PRIDE"
+            "aktualisiert.\n\nDein Veranstaltungsteam"
         ),
         delivery_mode=MANUAL,
     ),
@@ -87,7 +87,7 @@ DEFAULT_TEMPLATES = (
         body=(
             "Hallo {first_name},\n\n"
             "deine Schicht „{shift_title}“ bei {event_name} wurde storniert."
-            "\n\nST. PRIDE"
+            "\n\nDein Veranstaltungsteam"
         ),
         delivery_mode=MANUAL,
     ),
@@ -102,7 +102,8 @@ DEFAULT_TEMPLATES = (
         body=(
             "Hallo {first_name},\n\n"
             "leider können wir deine Anmeldung für {event_name} nicht annehmen.\n"
-            "Begründung: {reason}\n\nBei Rückfragen: {contact_email}\n\nST. PRIDE"
+            "Begründung: {reason}\n\nBei Rückfragen: {contact_email}\n\n"
+            "Dein Veranstaltungsteam"
         ),
         delivery_mode=AUTOMATIC,
     ),
@@ -117,7 +118,7 @@ DEFAULT_TEMPLATES = (
         body=(
             "Hallo {first_name},\n\n"
             "du bist für die Schicht „{shift_title}“ bei {event_name} von der "
-            "Warteliste nachgerückt und nun bestätigt.\n\nST. PRIDE"
+            "Warteliste nachgerückt und nun bestätigt.\n\nDein Veranstaltungsteam"
         ),
         delivery_mode=AUTOMATIC,
     ),
@@ -174,7 +175,7 @@ def queue_templated_mail(
         "first_name": volunteer.first_name,
         "last_name": volunteer.last_name,
         "event_name": volunteer.event.name,
-        "contact_email": volunteer.event.contact_email or "volunteer@stpride.at",
+        "contact_email": volunteer.event.contact_email or "nicht hinterlegt",
         **(context or {}),
     }
     message = OutboxMessage(

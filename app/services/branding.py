@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from app.models import BrandingSettings
 from app.models.core import utcnow
 
-DEFAULT_LOGO_URL = "/static/images/st-pride-logo.png"
+DEFAULT_LOGO_URL = "/static/images/logo.png"
 MAX_LOGO_BYTES = 2 * 1024 * 1024
 MAX_RASTER_PIXELS = 20_000_000
 MAX_RASTER_WIDTH = 8_000

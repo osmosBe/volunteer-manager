@@ -293,7 +293,7 @@ if ([string]::IsNullOrWhiteSpace($MailFromAddress)) {
 if ([string]::IsNullOrWhiteSpace($MailFromName)) {
     $MailFromName = Get-ContainerEnvironmentValue $containerApp 'MAIL_FROM_NAME'
     if ([string]::IsNullOrWhiteSpace($MailFromName)) {
-        $MailFromName = 'ST. PRIDE Volunteer Manager'
+        $MailFromName = 'Volunteer Manager'
     }
 }
 if ([string]::IsNullOrWhiteSpace($MailReplyTo)) {

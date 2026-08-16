@@ -100,7 +100,7 @@ def test_smtp_configuration_is_admin_managed_without_password_field(
                 "port": 587,
                 "username": "mailer",
                 "from_email": "volunteer@example.org",
-                "from_name": "ST. PRIDE",
+                "from_name": "Volunteer Team",
                 "use_starttls": "true",
                 "enabled": "true",
             },
@@ -131,7 +131,7 @@ def test_outbox_delivery_uses_environment_password(monkeypatch, tmp_path):
                 port=587,
                 username="mailer",
                 from_email="volunteer@example.org",
-                from_name="ST. PRIDE",
+                from_name="Volunteer Team",
                 use_starttls=True,
                 enabled=True,
             )
@@ -158,7 +158,7 @@ def test_enabled_smtp_automatically_sends_pending_verification(monkeypatch, tmp_
                 port=587,
                 username="mailer",
                 from_email="volunteer@example.org",
-                from_name="ST. PRIDE",
+                from_name="Volunteer Team",
                 use_starttls=True,
                 enabled=True,
             )

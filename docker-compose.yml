@@ -15,7 +15,8 @@ services:
     ports:
       - "8000:8000"
     environment:
-      APP_NAME: "ST. PRIDE Volunteer Management"
+      APP_NAME: "Volunteer Manager"
+      MAIL_FROM_NAME: "Volunteer Manager"
       APP_VERSION: "0.1.0"
       ENVIRONMENT: "development"
       DATABASE_URL: "sqlite:////data/app.db"

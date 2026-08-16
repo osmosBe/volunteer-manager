@@ -4,7 +4,7 @@ Use fictional data only. The non-persistent DEV revision automatically runs the
 idempotent demo seed on startup. For a local demo, run migrations and then
 `python -m scripts.seed_default_event` once.
 
-1. Open `/` and select **St. Pölten PRIDE 2026**.
+1. Open `/` and select **Demo-Veranstaltung 2026**.
 2. Click a shift card or its **Für diese Schicht anmelden** button and verify
    that the registration form opens with that shift selected. Briefly enter an
    invalid e-mail address to show immediate validation in the central error box,
@@ -33,7 +33,7 @@ idempotent demo seed on startup. For a local demo, run migrations and then
 ## Demo URLs
 
 - Public landing page: `/`
-- Registration: `/veranstaltungen/pride-2026/anmeldung`
+- Registration: `/veranstaltungen/demo-2026/anmeldung`
 - Admin dashboard: `/admin`
 - Volunteers: `/admin/ehrenamtliche`
 - Check-in: `/admin/check-in`
