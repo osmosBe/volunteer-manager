@@ -24,6 +24,9 @@ param registryPassword string
 @description('SQLAlchemy PostgreSQL URL stored only as a Container App secret.')
 param databaseUrl string
 
+@description('Show the global demo-mode warning in the application UI.')
+param demoMode bool = false
+
 @description('Transactional mail provider.')
 param mailProvider string = 'console'
 
@@ -112,6 +115,10 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'SEED_DEMO_DATA'
               value: 'false'
+            }
+            {
+              name: 'DEMO_MODE'
+              value: string(demoMode)
             }
             {
               name: 'MAIL_PROVIDER'

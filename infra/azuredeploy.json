@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.45.15.27210",
-      "templateHash": "2651574893723943039"
+      "templateHash": "16618362065871008328"
     }
   },
   "parameters": {
@@ -89,6 +89,13 @@
       "defaultValue": true,
       "metadata": {
         "description": "Create a storage account for future files/exports. It is not used for the database."
+      }
+    },
+    "demoMode": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Show a global warning that the application is running in demo mode."
       }
     },
     "mailProvider": {
@@ -773,6 +780,9 @@
           "databaseUrl": {
             "value": "[format('postgresql+psycopg://{0}:{1}@{2}:5432/{3}?sslmode=require', parameters('postgresqlAdministratorLogin'), uriComponent(parameters('postgresqlAdministratorPassword')), reference(resourceId('Microsoft.Resources/deployments', 'postgresql'), '2025-04-01').outputs.fullyQualifiedDomainName.value, reference(resourceId('Microsoft.Resources/deployments', 'postgresql'), '2025-04-01').outputs.databaseName.value)]"
           },
+          "demoMode": {
+            "value": "[parameters('demoMode')]"
+          },
           "mailProvider": {
             "value": "[parameters('mailProvider')]"
           },
@@ -808,7 +818,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.45.15.27210",
-              "templateHash": "1360922842366843868"
+              "templateHash": "2020515735487059570"
             }
           },
           "parameters": {
@@ -858,6 +868,13 @@
               "type": "securestring",
               "metadata": {
                 "description": "SQLAlchemy PostgreSQL URL stored only as a Container App secret."
+              }
+            },
+            "demoMode": {
+              "type": "bool",
+              "defaultValue": false,
+              "metadata": {
+                "description": "Show the global demo-mode warning in the application UI."
               }
             },
             "mailProvider": {
@@ -957,7 +974,7 @@
                     {
                       "name": "volunteer-manager",
                       "image": "[parameters('image')]",
-                      "env": "[concat(createArray(createObject('name', 'DATABASE_URL', 'secretRef', 'database-url'), createObject('name', 'ENVIRONMENT', 'value', 'development'), createObject('name', 'AUTH_MODE', 'value', 'easyauth'), createObject('name', 'SEED_DEMO_DATA', 'value', 'false'), createObject('name', 'MAIL_PROVIDER', 'value', parameters('mailProvider')), createObject('name', 'MAIL_FROM_ADDRESS', 'value', parameters('mailFromAddress')), createObject('name', 'MAIL_FROM_NAME', 'value', parameters('mailFromName')), createObject('name', 'MAIL_REPLY_TO', 'value', parameters('mailReplyTo')), createObject('name', 'M365_TENANT_ID', 'value', parameters('m365TenantId')), createObject('name', 'M365_CLIENT_ID', 'value', parameters('m365ClientId')), createObject('name', 'M365_AUTH_MODE', 'value', parameters('m365AuthMode'))), if(empty(parameters('m365ClientSecret')), createArray(), createArray(createObject('name', 'M365_CLIENT_SECRET', 'secretRef', 'm365-client-secret'))))]",
+                      "env": "[concat(createArray(createObject('name', 'DATABASE_URL', 'secretRef', 'database-url'), createObject('name', 'ENVIRONMENT', 'value', 'development'), createObject('name', 'AUTH_MODE', 'value', 'easyauth'), createObject('name', 'SEED_DEMO_DATA', 'value', 'false'), createObject('name', 'DEMO_MODE', 'value', string(parameters('demoMode'))), createObject('name', 'MAIL_PROVIDER', 'value', parameters('mailProvider')), createObject('name', 'MAIL_FROM_ADDRESS', 'value', parameters('mailFromAddress')), createObject('name', 'MAIL_FROM_NAME', 'value', parameters('mailFromName')), createObject('name', 'MAIL_REPLY_TO', 'value', parameters('mailReplyTo')), createObject('name', 'M365_TENANT_ID', 'value', parameters('m365TenantId')), createObject('name', 'M365_CLIENT_ID', 'value', parameters('m365ClientId')), createObject('name', 'M365_AUTH_MODE', 'value', parameters('m365AuthMode'))), if(empty(parameters('m365ClientSecret')), createArray(), createArray(createObject('name', 'M365_CLIENT_SECRET', 'secretRef', 'm365-client-secret'))))]",
                       "resources": {
                         "cpu": "[json('0.5')]",
                         "memory": "1Gi"

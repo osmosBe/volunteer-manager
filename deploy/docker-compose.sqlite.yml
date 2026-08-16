@@ -8,6 +8,7 @@ services:
       DATABASE_URL: "sqlite:////data/volunteer.db"
       APP_BASE_URL: "${APP_BASE_URL:-http://localhost:8000}"
       AUTH_MODE: "${AUTH_MODE:-oidc}"
+      DEMO_MODE: "${DEMO_MODE:-false}"
       SESSION_SECRET: "${SESSION_SECRET:-}"
       OIDC_ISSUER_URL: "${OIDC_ISSUER_URL:-}"
       OIDC_CLIENT_ID: "${OIDC_CLIENT_ID:-}"

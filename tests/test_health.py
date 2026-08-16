@@ -59,6 +59,26 @@ def test_landing_page_is_public(monkeypatch, tmp_path) -> None:
     assert "Derzeit sind keine Anmeldungen geöffnet" in response.text
 
 
+@pytest.mark.parametrize(
+    ("demo_mode", "indicator_visible"),
+    [("true", True), ("false", False)],
+)
+def test_demo_mode_indicator_follows_environment(
+    monkeypatch, demo_mode: str, indicator_visible: bool
+) -> None:
+    _set_auth_env(monkeypatch, "easyauth")
+    monkeypatch.setenv("DEMO_MODE", demo_mode)
+    get_settings.cache_clear()
+
+    response = TestClient(app).get("/does-not-exist")
+
+    assert response.status_code == 404
+    assert ("data-demo-mode-indicator" in response.text) is indicator_visible
+    assert ("bitte keine echten personenbezogenen Daten" in response.text) is (
+        indicator_visible
+    )
+
+
 def test_admin_denies_access_in_easyauth_mode_without_headers(monkeypatch) -> None:
     _set_auth_env(monkeypatch, "easyauth")
     client = TestClient(app)
@@ -94,6 +114,7 @@ def test_admin_allows_access_when_auth_mode_disabled(monkeypatch, tmp_path) -> N
     assert 'href="/admin/db"' in response.text
     assert 'href="/admin/einstellungen/smtp"' in response.text
     assert 'href="/admin/branding"' in response.text
+    assert "Demo-Adminbereich" not in response.text
 
 
 def test_easyauth_principal_parser_handles_valid_client_principal() -> None:

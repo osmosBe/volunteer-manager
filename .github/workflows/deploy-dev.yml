@@ -111,6 +111,29 @@ jobs:
             --target-port 8000 \
             --output none
 
+      - name: Configure DEV demo mode
+        env:
+          CONFIG_DEMO_MODE: ${{ vars.DEMO_MODE }}
+        run: |
+          case "$CONFIG_DEMO_MODE" in
+            ""|true)
+              demo_mode=true
+              ;;
+            false)
+              demo_mode=false
+              ;;
+            *)
+              echo "DEMO_MODE must be true or false when configured." >&2
+              exit 1
+              ;;
+          esac
+          az containerapp update \
+            --name "$CONTAINER_APP_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --set-env-vars "DEMO_MODE=$demo_mode" \
+            --output none
+          echo "DEPLOYED_DEMO_MODE=$demo_mode" >> "$GITHUB_ENV"
+
       - name: Run database deployment job
         env:
           CONFIG_SEED_DEMO_DATA: ${{ vars.SEED_DEMO_DATA }}
@@ -191,7 +214,14 @@ jobs:
             echo "DEV readiness check did not confirm database connectivity." >&2
             exit 1
           fi
-          echo "DEV revision, Alembic migration, liveness and readiness passed for $EXPECTED_VERSION."
+          landing_html=$(curl --fail --silent --show-error "$base_url/")
+          if [ "$DEPLOYED_DEMO_MODE" = "true" ]; then
+            printf '%s' "$landing_html" | grep -q 'data-demo-mode-indicator'
+          elif printf '%s' "$landing_html" | grep -q 'data-demo-mode-indicator'; then
+            echo "DEV unexpectedly displays the demo-mode indicator." >&2
+            exit 1
+          fi
+          echo "DEV revision, Alembic migration, liveness, readiness and demo-mode presentation passed for $EXPECTED_VERSION."
 
       - name: Diagnose failed DEV deployment
         if: failure()

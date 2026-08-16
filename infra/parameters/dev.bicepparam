@@ -2,6 +2,7 @@ using '../main.bicep'
 
 param namePrefix = 'volunteer'
 param environmentName = 'dev'
+param demoMode = true
 param location = 'northeurope'
 param deployStorage = true
 

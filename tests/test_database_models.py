@@ -278,6 +278,8 @@ def test_deployment_uses_fixed_database_job_entrypoint():
     assert "--command ./scripts/deploy_database.py" in workflow
     assert "--args" not in workflow
     assert '--set-env-vars "SEED_DEMO_DATA=$seed_demo_data"' in workflow
+    assert '--set-env-vars "DEMO_MODE=$demo_mode"' in workflow
+    assert "data-demo-mode-indicator" in workflow
     assert "scripts/deploy_database.py" in migration_job
     assert "scripts.seed_default_event" not in workflow
 
