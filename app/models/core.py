@@ -15,6 +15,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -607,6 +608,24 @@ class AuditLog(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
     )
+
+
+class BrandingSettings(TimestampMixin, Base):
+    """Singleton, portable branding configuration stored in the database."""
+
+    __tablename__ = "branding_settings"
+    __table_args__ = (
+        CheckConstraint("id = 1", name="ck_branding_settings_singleton"),
+        CheckConstraint(
+            "NOT (logo_url IS NOT NULL AND logo_data IS NOT NULL)",
+            name="ck_branding_logo_source",
+        ),
+    )
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    logo_url: Mapped[str | None] = mapped_column(String(2048))
+    logo_data: Mapped[bytes | None] = mapped_column(LargeBinary)
+    logo_content_type: Mapped[str | None] = mapped_column(String(80))
+    logo_filename: Mapped[str | None] = mapped_column(String(255))
 
 
 class Permission(TimestampMixin, Base):

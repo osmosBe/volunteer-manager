@@ -6,7 +6,14 @@ from sqlalchemy import inspect
 from sqlalchemy.orm import sessionmaker
 
 from app.database.session import create_database_engine
-from app.models import AgeGroup, Event, EventStatus, Volunteer, VolunteerStatus
+from app.models import (
+    AgeGroup,
+    BrandingSettings,
+    Event,
+    EventStatus,
+    Volunteer,
+    VolunteerStatus,
+)
 from app.services.volunteers import deterministic_email_hash, normalize_email
 
 POSTGRES_TEST_URL = os.getenv("POSTGRES_TEST_URL")
@@ -64,4 +71,21 @@ def test_postgresql_models_accept_nullable_event_and_birth_date():
         assert event.status == EventStatus.registration_open
         assert volunteer.birth_date is None
 
+        db.rollback()
+
+
+def test_postgresql_branding_singleton_accepts_binary_logo_data():
+    engine = create_database_engine(POSTGRES_TEST_URL)
+    Session = sessionmaker(bind=engine)
+
+    with Session() as db:
+        branding = db.get(BrandingSettings, 1)
+        assert branding is not None
+        branding.logo_url = None
+        branding.logo_data = b"postgres-logo"
+        branding.logo_content_type = "image/png"
+        branding.logo_filename = "logo.png"
+        db.flush()
+
+        assert branding.logo_data == b"postgres-logo"
         db.rollback()
