@@ -62,6 +62,17 @@ class Settings(BaseSettings):
     admin_allowed_group_ids: CsvList = Field(default_factory=list)
     smtp_password: SecretStr | None = None
 
+    # Transactional mail foundation. ``console`` is deliberately safe for new
+    # and local installations; selecting Graph requires complete credentials.
+    mail_provider: Literal["console", "graph"] = "console"
+    mail_from_address: str | None = None
+    mail_from_name: str = "ST. PRIDE Volunteer Manager"
+    mail_reply_to: str | None = None
+    m365_tenant_id: str | None = None
+    m365_client_id: str | None = None
+    m365_client_secret: SecretStr | None = None
+    m365_auth_mode: Literal["client_secret", "managed_identity"] = "client_secret"
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 

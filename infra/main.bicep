@@ -40,6 +40,39 @@ param bootstrapImage string = 'mcr.microsoft.com/azuredocs/containerapps-hellowo
 @description('Create a storage account for future files/exports. It is not used for the database.')
 param deployStorage bool = true
 
+@description('Transactional mail provider. Console performs no external delivery.')
+@allowed([
+  'console'
+  'graph'
+])
+param mailProvider string = 'console'
+
+@description('Configured sender/shared mailbox address. Required before sending mail.')
+param mailFromAddress string = ''
+
+@description('Display name used for transactional mail.')
+param mailFromName string = 'ST. PRIDE Volunteer Manager'
+
+@description('Optional Reply-To address.')
+param mailReplyTo string = ''
+
+@description('Microsoft 365 tenant ID. Required only for the Graph provider.')
+param m365TenantId string = ''
+
+@description('Entra application client ID. Required only for the Graph provider.')
+param m365ClientId string = ''
+
+@description('Graph credential mode. Managed Identity is reserved for future support.')
+@allowed([
+  'client_secret'
+  'managed_identity'
+])
+param m365AuthMode string = 'client_secret'
+
+@secure()
+@description('Entra client secret. Stored only as a Container App secret; leave empty for console mode.')
+param m365ClientSecret string = ''
+
 var suffix = uniqueString(subscription().subscriptionId, resourceGroup().id, namePrefix)
 var normalizedPrefix = toLower(replace(namePrefix, '-', ''))
 var generatedEnvironmentName = '${namePrefix}-${environmentName}-env'
@@ -123,6 +156,14 @@ module containerApp 'modules/container-app.bicep' = if (empty(existingContainerA
     registryUsername: registryCredentials.username
     registryPassword: registryCredentials.passwords[0].value
     databaseUrl: databaseUrl
+    mailProvider: mailProvider
+    mailFromAddress: mailFromAddress
+    mailFromName: mailFromName
+    mailReplyTo: mailReplyTo
+    m365TenantId: m365TenantId
+    m365ClientId: m365ClientId
+    m365AuthMode: m365AuthMode
+    m365ClientSecret: m365ClientSecret
     tags: tags
   }
 }

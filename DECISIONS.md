@@ -35,6 +35,18 @@ Application workflows create messages in the outbox according to administrable
 mail templates and delivery modes. SMTP delivery is explicit and failure-tolerant;
 the SMTP password remains an environment/Azure secret rather than database data.
 
+New transactional delivery code uses the provider-neutral `MailService` boundary
+with `console` and Microsoft Graph providers. Graph uses app-only authentication
+and the configured shared mailbox; business routes must never call Graph
+directly. The existing SMTP/outbox workflow remains isolated until a later
+workflow migration, and this foundation deliberately adds no queue worker.
+
+For Microsoft 365, Exchange Online Application RBAC is the authorization source
+of truth. A scoped `Application Mail.Send` role replaces—not supplements—an
+unscoped Entra `Mail.Send` grant, because permissions from both authorities are
+additive. Client secrets are supported initially; managed identity is the future
+credential model behind the existing token-provider boundary.
+
 ## Historical assignments are retained
 
 Assignments are status-driven instead of hard-deleted. Anonymization removes
@@ -45,7 +57,7 @@ Relevant administrative changes are recorded in the audit log.
 
 - Replace PostgreSQL password authentication with managed identity/Entra auth
   after operational validation.
-- Add a production mail provider with stronger retries and delivery reporting.
+- Insert the persistent outbox between business workflows and `MailService`.
 - Add finer-grained Entra groups and automated data retention.
 - Add dedicated CSRF tokens if the app is exposed without the Easy Auth
   same-site authentication boundary.

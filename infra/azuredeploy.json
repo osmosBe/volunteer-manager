@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.45.15.27210",
-      "templateHash": "3348552717732967982"
+      "templateHash": "2651574893723943039"
     }
   },
   "parameters": {
@@ -89,6 +89,70 @@
       "defaultValue": true,
       "metadata": {
         "description": "Create a storage account for future files/exports. It is not used for the database."
+      }
+    },
+    "mailProvider": {
+      "type": "string",
+      "defaultValue": "console",
+      "allowedValues": [
+        "console",
+        "graph"
+      ],
+      "metadata": {
+        "description": "Transactional mail provider. Console performs no external delivery."
+      }
+    },
+    "mailFromAddress": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Configured sender/shared mailbox address. Required before sending mail."
+      }
+    },
+    "mailFromName": {
+      "type": "string",
+      "defaultValue": "ST. PRIDE Volunteer Manager",
+      "metadata": {
+        "description": "Display name used for transactional mail."
+      }
+    },
+    "mailReplyTo": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional Reply-To address."
+      }
+    },
+    "m365TenantId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Microsoft 365 tenant ID. Required only for the Graph provider."
+      }
+    },
+    "m365ClientId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Entra application client ID. Required only for the Graph provider."
+      }
+    },
+    "m365AuthMode": {
+      "type": "string",
+      "defaultValue": "client_secret",
+      "allowedValues": [
+        "client_secret",
+        "managed_identity"
+      ],
+      "metadata": {
+        "description": "Graph credential mode. Managed Identity is reserved for future support."
+      }
+    },
+    "m365ClientSecret": {
+      "type": "securestring",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Entra client secret. Stored only as a Container App secret; leave empty for console mode."
       }
     }
   },
@@ -709,6 +773,30 @@
           "databaseUrl": {
             "value": "[format('postgresql+psycopg://{0}:{1}@{2}:5432/{3}?sslmode=require', parameters('postgresqlAdministratorLogin'), uriComponent(parameters('postgresqlAdministratorPassword')), reference(resourceId('Microsoft.Resources/deployments', 'postgresql'), '2025-04-01').outputs.fullyQualifiedDomainName.value, reference(resourceId('Microsoft.Resources/deployments', 'postgresql'), '2025-04-01').outputs.databaseName.value)]"
           },
+          "mailProvider": {
+            "value": "[parameters('mailProvider')]"
+          },
+          "mailFromAddress": {
+            "value": "[parameters('mailFromAddress')]"
+          },
+          "mailFromName": {
+            "value": "[parameters('mailFromName')]"
+          },
+          "mailReplyTo": {
+            "value": "[parameters('mailReplyTo')]"
+          },
+          "m365TenantId": {
+            "value": "[parameters('m365TenantId')]"
+          },
+          "m365ClientId": {
+            "value": "[parameters('m365ClientId')]"
+          },
+          "m365AuthMode": {
+            "value": "[parameters('m365AuthMode')]"
+          },
+          "m365ClientSecret": {
+            "value": "[parameters('m365ClientSecret')]"
+          },
           "tags": {
             "value": "[variables('tags')]"
           }
@@ -720,7 +808,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.45.15.27210",
-              "templateHash": "13742277194338823522"
+              "templateHash": "1360922842366843868"
             }
           },
           "parameters": {
@@ -772,6 +860,62 @@
                 "description": "SQLAlchemy PostgreSQL URL stored only as a Container App secret."
               }
             },
+            "mailProvider": {
+              "type": "string",
+              "defaultValue": "console",
+              "metadata": {
+                "description": "Transactional mail provider."
+              }
+            },
+            "mailFromAddress": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Configured sender/shared mailbox address."
+              }
+            },
+            "mailFromName": {
+              "type": "string",
+              "defaultValue": "ST. PRIDE Volunteer Manager",
+              "metadata": {
+                "description": "Transactional mail sender display name."
+              }
+            },
+            "mailReplyTo": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Optional transactional mail Reply-To address."
+              }
+            },
+            "m365TenantId": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Microsoft 365 tenant ID."
+              }
+            },
+            "m365ClientId": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Entra application client ID for Graph mail."
+              }
+            },
+            "m365AuthMode": {
+              "type": "string",
+              "defaultValue": "client_secret",
+              "metadata": {
+                "description": "Graph credential mode."
+              }
+            },
+            "m365ClientSecret": {
+              "type": "securestring",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Entra client secret for Graph mail."
+              }
+            },
             "tags": {
               "type": "object",
               "defaultValue": {},
@@ -806,40 +950,14 @@
                       "passwordSecretRef": "registry-password"
                     }
                   ],
-                  "secrets": [
-                    {
-                      "name": "database-url",
-                      "value": "[parameters('databaseUrl')]"
-                    },
-                    {
-                      "name": "registry-password",
-                      "value": "[parameters('registryPassword')]"
-                    }
-                  ]
+                  "secrets": "[concat(createArray(createObject('name', 'database-url', 'value', parameters('databaseUrl')), createObject('name', 'registry-password', 'value', parameters('registryPassword'))), if(empty(parameters('m365ClientSecret')), createArray(), createArray(createObject('name', 'm365-client-secret', 'value', parameters('m365ClientSecret')))))]"
                 },
                 "template": {
                   "containers": [
                     {
                       "name": "volunteer-manager",
                       "image": "[parameters('image')]",
-                      "env": [
-                        {
-                          "name": "DATABASE_URL",
-                          "secretRef": "database-url"
-                        },
-                        {
-                          "name": "ENVIRONMENT",
-                          "value": "development"
-                        },
-                        {
-                          "name": "AUTH_MODE",
-                          "value": "easyauth"
-                        },
-                        {
-                          "name": "SEED_DEMO_DATA",
-                          "value": "false"
-                        }
-                      ],
+                      "env": "[concat(createArray(createObject('name', 'DATABASE_URL', 'secretRef', 'database-url'), createObject('name', 'ENVIRONMENT', 'value', 'development'), createObject('name', 'AUTH_MODE', 'value', 'easyauth'), createObject('name', 'SEED_DEMO_DATA', 'value', 'false'), createObject('name', 'MAIL_PROVIDER', 'value', parameters('mailProvider')), createObject('name', 'MAIL_FROM_ADDRESS', 'value', parameters('mailFromAddress')), createObject('name', 'MAIL_FROM_NAME', 'value', parameters('mailFromName')), createObject('name', 'MAIL_REPLY_TO', 'value', parameters('mailReplyTo')), createObject('name', 'M365_TENANT_ID', 'value', parameters('m365TenantId')), createObject('name', 'M365_CLIENT_ID', 'value', parameters('m365ClientId')), createObject('name', 'M365_AUTH_MODE', 'value', parameters('m365AuthMode'))), if(empty(parameters('m365ClientSecret')), createArray(), createArray(createObject('name', 'M365_CLIENT_SECRET', 'secretRef', 'm365-client-secret'))))]",
                       "resources": {
                         "cpu": "[json('0.5')]",
                         "memory": "1Gi"

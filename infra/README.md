@@ -19,6 +19,8 @@ Passing `existingContainerAppEnvironmentName`,
 `existingPostgresServerName` opts into reuse. An existing Container App is only
 referenced; Bicep deliberately does not replace its complete configuration.
 `scripts/bootstrap.ps1` adds a missing named database secret/reference safely.
+The same bootstrap can add provider-neutral mail settings and a missing
+`m365-client-secret` reference without printing the credential.
 
 ## CLI deployment
 
@@ -49,6 +51,25 @@ az deployment group create \
 
 Review `az deployment group what-if` before applying to an existing Resource
 Group. The template does not delete Azure Files, existing OIDC or GitHub state.
+
+Mail parameters default to a non-sending open-source installation:
+
+```text
+mailProvider=console
+mailFromAddress=''
+mailFromName='ST. PRIDE Volunteer Manager'
+mailReplyTo=''
+m365TenantId=''
+m365ClientId=''
+m365AuthMode=client_secret
+m365ClientSecret=''  # secure parameter; Graph mode only
+```
+
+For an existing app, prefer `scripts/bootstrap.ps1 -MailProvider graph ...` and
+enter `M365ClientSecret` only through its hidden secure-string prompt. Bicep and
+bootstrap configure Azure runtime values only; Microsoft Graph/Exchange Online
+tenant authorization remains a separate administrator task documented in the
+root README.
 
 ## Deployment outputs
 
