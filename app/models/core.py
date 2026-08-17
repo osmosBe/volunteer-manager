@@ -182,6 +182,9 @@ class Event(TimestampMixin, Base):
     catering_info: Mapped[str | None] = mapped_column(Text)
     accessibility_info: Mapped[str | None] = mapped_column(Text)
     allows_minors: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    goodiebag_offered: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
     is_public: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     teams: Mapped[list["Team"]] = relationship(
         back_populates="event", cascade="all, delete-orphan"
@@ -365,9 +368,18 @@ class Shift(TimestampMixin, Base):
     requires_police_export: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False
     )
+    goodiebag_override: Mapped[bool | None] = mapped_column(Boolean)
     event: Mapped[Event] = relationship(back_populates="shifts")
     role: Mapped[Role | None] = relationship(back_populates="shifts")
     assignments: Mapped[list["ShiftAssignment"]] = relationship(back_populates="shift")
+
+    @property
+    def goodiebag_is_offered(self) -> bool:
+        """Return the effective Goodiebag setting for this shift."""
+
+        if self.goodiebag_override is not None:
+            return self.goodiebag_override
+        return self.event.goodiebag_offered
 
 
 class ShiftAssignment(TimestampMixin, Base):
@@ -424,6 +436,9 @@ class CheckIn(TimestampMixin, Base):
         Boolean, default=False, nullable=False
     )
     radio_issued: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    goodiebag_received: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
     other_issued: Mapped[str | None] = mapped_column(Text)
     materials_returned_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True)
@@ -636,6 +651,16 @@ class BrandingSettings(TimestampMixin, Base):
     logo_data: Mapped[bytes | None] = mapped_column(LargeBinary)
     logo_content_type: Mapped[str | None] = mapped_column(String(80))
     logo_filename: Mapped[str | None] = mapped_column(String(255))
+
+
+class LegalSettings(TimestampMixin, Base):
+    """Singleton legal-footer configuration stored in the application database."""
+
+    __tablename__ = "legal_settings"
+    __table_args__ = (CheckConstraint("id = 1", name="ck_legal_settings_singleton"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    privacy_url: Mapped[str | None] = mapped_column(String(2048))
+    imprint_url: Mapped[str | None] = mapped_column(String(2048))
 
 
 class Permission(TimestampMixin, Base):

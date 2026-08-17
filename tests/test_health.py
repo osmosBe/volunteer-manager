@@ -109,7 +109,8 @@ def test_admin_allows_access_when_auth_mode_disabled(monkeypatch, tmp_path) -> N
 
     assert response.status_code == 200
     assert "Volunteer Manager – Admin Dashboard" in response.text
-    assert "Local Developer" in response.text
+    assert "local-dev@example.invalid" not in response.text
+    assert "Local Developer" not in response.text
     assert 'href="/admin/permissions"' in response.text
     assert 'href="/admin/db"' in response.text
     assert 'href="/admin/einstellungen/smtp"' in response.text
@@ -207,7 +208,7 @@ def test_debug_db_returns_safe_schema_diagnostics(monkeypatch, tmp_path) -> None
         "database_reachable": True,
         "schema_initialized": False,
         "current_revision": None,
-        "expected_revision": "20260816_0014",
+        "expected_revision": "20260816_0016",
         "migration_pending": True,
         "tables": {"events": False, "volunteers": False, "shifts": False},
         "diagnostic_error": None,

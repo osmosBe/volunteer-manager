@@ -1,0 +1,43 @@
+.app-navbar .navbar-brand img {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: min(52vw, 260px);
+  max-height: 64px;
+}
+
+.app-navbar .nav-link,
+.app-navbar .dropdown-item,
+.app-navbar .navbar-toggler {
+  min-height: 44px;
+}
+
+.app-navbar .nav-link,
+.app-navbar .dropdown-item {
+  display: flex;
+  align-items: center;
+}
+
+.app-navbar .public-login-link {
+  color: var(--bs-secondary-color);
+  font-size: 0.875rem;
+}
+
+.app-footer a {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+
+@media (max-width: 991.98px) {
+  .app-navbar .navbar-collapse {
+    border-top: 1px solid var(--bs-border-color);
+    margin-top: 0.5rem;
+    padding: 0.5rem 0 0.75rem;
+  }
+
+  .app-navbar .dropdown-menu {
+    border: 0;
+    padding-left: 1rem;
+  }
+}

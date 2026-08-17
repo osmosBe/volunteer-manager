@@ -187,38 +187,87 @@ def test_route_permission_matrix(permission_app):
         "/admin/check-in",
         "/admin/einstellungen/smtp",
         "/admin/branding",
+        "/admin/einstellungen/rechtliches",
         "/admin/permissions",
         "/admin/db",
         "/admin/mail",
     ):
         assert client.get(path, headers=admin).status_code == 200, path
     admin_dashboard = client.get("/admin", headers=admin)
+    assert admin_dashboard.text.index("app-navbar") < admin_dashboard.text.index(
+        "<main"
+    )
+    assert 'href="/auth/home"' in admin_dashboard.text
+    assert 'data-bs-target="#application-navigation"' in admin_dashboard.text
+    assert 'aria-controls="application-navigation"' in admin_dashboard.text
     assert 'href="/admin/permissions"' in admin_dashboard.text
     assert 'href="/admin/db"' in admin_dashboard.text
     assert 'href="/admin/branding"' in admin_dashboard.text
+    assert 'href="/admin/einstellungen/rechtliches"' in admin_dashboard.text
 
     manager_dashboard = client.get("/admin", headers=manager)
     assert manager_dashboard.status_code == 200
     assert "/admin/permissions" not in manager_dashboard.text
     assert "/admin/einstellungen/smtp" not in manager_dashboard.text
     assert "/admin/branding" not in manager_dashboard.text
+    assert "/admin/einstellungen/rechtliches" not in manager_dashboard.text
     assert "/admin/db" not in manager_dashboard.text
     assert client.get("/admin/check-in", headers=manager).status_code == 200
     assert client.get("/admin/mail", headers=manager).status_code == 200
     for path in (
         "/admin/einstellungen/smtp",
         "/admin/branding",
+        "/admin/einstellungen/rechtliches",
         "/admin/permissions",
         "/admin/db",
     ):
         assert client.get(path, headers=manager).status_code == 403, path
 
     assert client.get("/admin/check-in", headers=checkin).status_code == 200
+    checkin_page = client.get("/admin/check-in", headers=checkin)
+    assert 'href="/auth/home"' in checkin_page.text
+    assert 'href="/admin/check-in"' in checkin_page.text
+    assert 'href="/admin"' not in checkin_page.text
+    assert 'href="/admin/ehrenamtliche"' not in checkin_page.text
+    assert 'href="/auth/logout"' in checkin_page.text
     for path in ("/admin", "/admin/mail", "/admin/permissions", "/admin/db"):
         assert client.get(path, headers=checkin).status_code == 403, path
 
     for path in ("/admin", "/admin/check-in", "/admin/mail", "/admin/db"):
         assert client.get(path, headers=police).status_code == 403, path
+
+
+def test_anonymous_and_unauthorized_navigation_fail_safe(permission_app):
+    client, _ = permission_app
+
+    anonymous = client.get("/")
+    assert anonymous.status_code == 200
+    assert 'class="navbar-brand py-2" href="/"' in anonymous.text
+    assert 'class="nav-link public-login-link" href="/auth/login"' in anonymous.text
+    assert "Admin-Login" not in anonymous.text
+    assert 'href="/auth/logout"' not in anonymous.text
+
+    unauthorized = _role_header("Unknown.ApplicationRole")
+    public_page = client.get("/", headers=unauthorized)
+    assert 'href="/auth/home"' in public_page.text
+    assert 'href="/auth/logout"' in public_page.text
+    assert 'href="/admin"' not in public_page.text
+    home = client.get("/auth/home", headers=unauthorized, follow_redirects=False)
+    assert home.status_code == 303
+    assert home.headers["location"] == "/"
+
+
+def test_navigation_assets_are_responsive_and_touch_friendly(permission_app):
+    client, _ = permission_app
+
+    stylesheet = client.get("/static/css/app.css")
+
+    assert stylesheet.status_code == 200
+    assert "min-height: 44px" in stylesheet.text
+    assert "@media (max-width: 991.98px)" in stylesheet.text
+    page = client.get("/admin", headers=_role_header("Volunteer.Admin"))
+    assert "navbar-expand-lg" in page.text
+    assert "bootstrap.bundle.min.js" in page.text
 
 
 @pytest.mark.parametrize(

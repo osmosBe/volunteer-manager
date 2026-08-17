@@ -1,0 +1,31 @@
+<section class="card card-body mt-3" aria-labelledby="checkout-heading-{{ assignment.id }}">
+  <h3 class="h5" id="checkout-heading-{{ assignment.id }}">Check-out</h3>
+  <h4 class="h6">Ausgegebenes Material</h4>
+  {% if assignment.checkin.material_issues %}
+    <ul>
+      {% for issue in assignment.checkin.material_issues %}
+        <li>
+          {{ issue.material.name }} · {{ issue.quantity_issued }} {{ issue.material.unit }}
+          {% if issue.return_required and not issue.returned_at %}
+            <strong class="text-danger">· beim Check-out zurücknehmen</strong>
+          {% elif issue.return_required %}
+            · bereits zurückgegeben
+          {% else %}
+            · Verbrauch, keine Rückgabe
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p>Kein Material ausgegeben.</p>
+  {% endif %}
+  <form method="post" action="/admin/check-in/{{ assignment.id }}/check-out">
+    {% if assignment.shift.goodiebag_is_offered %}
+      <div class="form-check mb-3">
+        <input class="form-check-input" type="checkbox" value="true" id="goodiebag_received_{{ assignment.id }}" name="goodiebag_received">
+        <label class="form-check-label" for="goodiebag_received_{{ assignment.id }}">Goodiebag erhalten</label>
+      </div>
+    {% endif %}
+    <button class="btn btn-outline-primary btn-lg">Check-out und Materialrückgabe</button>
+  </form>
+</section>

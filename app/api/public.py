@@ -5,7 +5,6 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response
-from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
@@ -32,9 +31,9 @@ from app.services.registrations import (
     update_registration,
     verify_email_token,
 )
+from app.template_engine import templates
 
 router = APIRouter(tags=["public"])
-templates = Jinja2Templates(directory="app/templates")
 DatabaseSession = Annotated[Session, Depends(get_db)]
 
 

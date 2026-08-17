@@ -2,11 +2,11 @@ import importlib
 import os
 import subprocess
 import sys
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 from fastapi.testclient import TestClient
-from sqlalchemy import inspect
+from sqlalchemy import inspect, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker
 
@@ -32,6 +32,7 @@ from app.models import (
     CheckInMaterial,
     Event,
     EventStatus,
+    LegalSettings,
     MailTemplate,
     OutboxMessage,
     ShiftAssignment,
@@ -130,7 +131,7 @@ def test_database_diagnostics_handles_uninitialized_schema(tmp_path):
         "database_reachable": True,
         "schema_initialized": False,
         "current_revision": None,
-        "expected_revision": "20260816_0014",
+        "expected_revision": "20260816_0016",
         "migration_pending": True,
         "tables": {"events": False, "volunteers": False, "shifts": False},
         "diagnostic_error": None,
@@ -198,6 +199,7 @@ def test_initial_migration_creates_tables(tmp_path):
         "permissions",
         "permission_mappings",
         "branding_settings",
+        "legal_settings",
         "alembic_version",
     }.issubset(table_names)
     Session = sessionmaker(bind=engine)
@@ -206,6 +208,22 @@ def test_initial_migration_creates_tables(tmp_path):
         assert branding is not None
         assert branding.logo_url is None
         assert branding.logo_data is None
+        legal = db.get(LegalSettings, 1)
+        assert legal is not None
+        assert legal.privacy_url is None
+        assert legal.imprint_url is None
+    event_columns = {
+        column["name"]: column for column in inspect(engine).get_columns("events")
+    }
+    shift_columns = {
+        column["name"]: column for column in inspect(engine).get_columns("shifts")
+    }
+    checkin_columns = {
+        column["name"]: column for column in inspect(engine).get_columns("checkins")
+    }
+    assert event_columns["goodiebag_offered"]["nullable"] is False
+    assert shift_columns["goodiebag_override"]["nullable"] is True
+    assert checkin_columns["goodiebag_received"]["nullable"] is False
 
 
 def test_neutral_branding_migration_updates_existing_defaults(tmp_path):
@@ -222,16 +240,32 @@ def test_neutral_branding_migration_updates_existing_defaults(tmp_path):
     engine = create_database_engine(f"sqlite:///{db_path}")
     Session = sessionmaker(bind=engine)
     with Session() as db:
+        now = datetime.now(timezone.utc)
+        db.execute(
+            text(
+                "INSERT INTO events "
+                "(name, slug, short_description, description, "
+                "public_meeting_point, status, allows_minors, is_public, "
+                "created_at, updated_at) "
+                "VALUES (:name, :slug, :short_description, :description, "
+                ":meeting_point, :status, :allows_minors, :is_public, "
+                ":created_at, :updated_at)"
+            ),
+            {
+                "name": f"{legacy_brand} Demo",
+                "slug": legacy_slug,
+                "short_description": f"{legacy_brand} Demo",
+                "description": f"Managed by {legacy_brand}",
+                "meeting_point": f"{legacy_brand} Infostand",
+                "status": EventStatus.draft.value,
+                "allows_minors": False,
+                "is_public": False,
+                "created_at": now,
+                "updated_at": now,
+            },
+        )
         db.add_all(
             [
-                Event(
-                    name=f"{legacy_brand} Demo",
-                    slug=legacy_slug,
-                    short_description=f"{legacy_brand} Demo",
-                    description=f"Managed by {legacy_brand}",
-                    public_meeting_point=f"{legacy_brand} Infostand",
-                    status=EventStatus.draft,
-                ),
                 SMTPConfiguration(
                     host="smtp.example.invalid",
                     from_email="sender@example.invalid",

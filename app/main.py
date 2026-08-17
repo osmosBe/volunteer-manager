@@ -14,16 +14,17 @@ from fastapi.responses import (
     StreamingResponse,
 )
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.api.admin_branding import router as admin_branding_router
+from app.api.admin_legal import router as admin_legal_router
 from app.api.admin_mail import router as admin_mail_router
 from app.api.admin_permissions import router as admin_permissions_router
 from app.api.public import router as public_router
+from app.auth.navigation import remember_navigation_permissions
 from app.auth.oidc import begin_login, clear_login, complete_login, oidc_diagnostics
 from app.auth.permissions import (
     has_permission,
@@ -88,9 +89,9 @@ from app.services.mail_templates import (
     ensure_mail_templates,
     unknown_placeholders,
 )
-from app.services.permissions import user_has_permission
 from app.services.qr_codes import qr_svg
 from app.services.volunteers import deterministic_email_hash
+from app.template_engine import templates
 
 admin_dependency = Depends(require_any_permission(["admin", "manager"]))
 checkin_dependency = Depends(require_any_permission(["admin", "manager", "checkin"]))
@@ -98,7 +99,6 @@ strict_admin_dependency = Depends(require_permission("admin"))
 db_dependency = Depends(get_db)
 
 settings = get_settings()
-templates = Jinja2Templates(directory="app/templates")
 logger = logging.getLogger(__name__)
 
 
@@ -145,6 +145,7 @@ async def expose_runtime_presentation(request: Request, call_next):
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 app.include_router(public_router)
 app.include_router(admin_branding_router)
+app.include_router(admin_legal_router)
 app.include_router(admin_mail_router)
 app.include_router(admin_permissions_router)
 
@@ -313,6 +314,7 @@ _EVENT_FORM_FIELDS = (
     "catering_info",
     "accessibility_info",
     "allows_minors",
+    "goodiebag_offered",
     "status",
     "is_public",
 )
@@ -321,7 +323,12 @@ _EVENT_FORM_FIELDS = (
 def _event_form_values(**values) -> dict[str, object]:
     result: dict[str, object] = {field: "" for field in _EVENT_FORM_FIELDS}
     result.update(
-        {"allows_minors": False, "status": EventStatus.draft.value, "is_public": False}
+        {
+            "allows_minors": False,
+            "goodiebag_offered": False,
+            "status": EventStatus.draft.value,
+            "is_public": False,
+        }
     )
     for field in _EVENT_FORM_FIELDS:
         if field not in values:
@@ -544,6 +551,19 @@ def _parse_registration_window(
     )
 
 
+def _parse_goodiebag_override(value: str) -> bool | None:
+    """Parse the explicit tri-state shift setting from an admin form."""
+
+    normalized = value.strip().lower()
+    if normalized in {"", "inherit"}:
+        return None
+    if normalized == "true":
+        return True
+    if normalized == "false":
+        return False
+    raise ValueError("Ungültige Goodiebag-Einstellung.")
+
+
 def _render_event_form(
     request: Request,
     event: Event | None,
@@ -599,6 +619,7 @@ def create_event(
     catering_info: Annotated[str, Form()] = "",
     accessibility_info: Annotated[str, Form()] = "",
     allows_minors: Annotated[bool, Form()] = False,
+    goodiebag_offered: Annotated[bool, Form()] = False,
     status_value: Annotated[str, Form(alias="status")] = EventStatus.draft.value,
     is_public: Annotated[bool, Form()] = False,
 ):
@@ -626,6 +647,7 @@ def create_event(
         catering_info=catering_info,
         accessibility_info=accessibility_info,
         allows_minors=allows_minors,
+        goodiebag_offered=goodiebag_offered,
         status=status_value,
         is_public=is_public,
     )
@@ -716,6 +738,7 @@ def create_event(
         catering_info=catering_info.strip() or None,
         accessibility_info=accessibility_info.strip() or None,
         allows_minors=allows_minors,
+        goodiebag_offered=goodiebag_offered,
         status=event_status,
         is_public=is_public,
     )
@@ -726,7 +749,11 @@ def create_event(
         action="event.created",
         entity_type="event",
         entity_id=event.id,
-        changes={"name": event.name, "status": event.status.value},
+        changes={
+            "name": event.name,
+            "status": event.status.value,
+            "goodiebag_offered": event.goodiebag_offered,
+        },
     )
     db.commit()
     return RedirectResponse(url=f"/admin/veranstaltungen/{event.id}", status_code=303)
@@ -794,6 +821,7 @@ def edit_event_submit(
     catering_info: Annotated[str, Form()] = "",
     accessibility_info: Annotated[str, Form()] = "",
     allows_minors: Annotated[bool, Form()] = False,
+    goodiebag_offered: Annotated[bool, Form()] = False,
     status_value: Annotated[str, Form(alias="status")] = EventStatus.draft.value,
     is_public: Annotated[bool, Form()] = False,
 ):
@@ -824,6 +852,7 @@ def edit_event_submit(
         catering_info=catering_info,
         accessibility_info=accessibility_info,
         allows_minors=allows_minors,
+        goodiebag_offered=goodiebag_offered,
         status=status_value,
         is_public=is_public,
     )
@@ -898,6 +927,7 @@ def edit_event_submit(
     event.catering_info = catering_info.strip() or None
     event.accessibility_info = accessibility_info.strip() or None
     event.allows_minors = allows_minors
+    event.goodiebag_offered = goodiebag_offered
     event.status = event_status
     event.is_public = is_public
     record_audit(
@@ -905,7 +935,11 @@ def edit_event_submit(
         action="event.updated",
         entity_type="event",
         entity_id=event.id,
-        changes={"name": event.name, "status": event.status.value},
+        changes={
+            "name": event.name,
+            "status": event.status.value,
+            "goodiebag_offered": event.goodiebag_offered,
+        },
     )
     db.commit()
     return RedirectResponse(url=f"/admin/veranstaltungen/{event.id}", status_code=303)
@@ -943,6 +977,7 @@ def duplicate_event(
         catering_info=source.catering_info,
         accessibility_info=source.accessibility_info,
         allows_minors=source.allows_minors,
+        goodiebag_offered=source.goodiebag_offered,
         status=EventStatus.draft,
         is_public=False,
     )
@@ -959,6 +994,7 @@ def duplicate_event(
                 ends_at=source_shift.ends_at,
                 needed_count=source_shift.needed_count,
                 waitlist_capacity=source_shift.waitlist_capacity,
+                goodiebag_override=source_shift.goodiebag_override,
                 status=ShiftStatus.draft,
             )
         )
@@ -1272,6 +1308,7 @@ def create_shift(
     waitlist_capacity: Annotated[int | None, Form()] = None,
     role_id: Annotated[int | None, Form()] = None,
     location: Annotated[str, Form()] = "",
+    goodiebag_override: Annotated[str, Form()] = "inherit",
 ):
     event = db.get(Event, event_id)
     if event is None:
@@ -1288,6 +1325,10 @@ def create_shift(
         raise HTTPException(
             status_code=422, detail="Kapazitäten dürfen nicht negativ sein"
         )
+    try:
+        parsed_goodiebag_override = _parse_goodiebag_override(goodiebag_override)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     role = db.get(Role, role_id) if role_id else None
     if role is not None and role.team.event_id != event.id:
         raise HTTPException(
@@ -1302,6 +1343,7 @@ def create_shift(
         needed_count=needed_count,
         waitlist_capacity=waitlist_capacity,
         location=location.strip() or None,
+        goodiebag_override=parsed_goodiebag_override,
         status=ShiftStatus.open,
     )
     db.add(shift)
@@ -1340,6 +1382,7 @@ def edit_shift_submit(
     waitlist_capacity: Annotated[int | None, Form()] = None,
     role_id: Annotated[int | None, Form()] = None,
     location: Annotated[str, Form()] = "",
+    goodiebag_override: Annotated[str, Form()] = "inherit",
     status_value: Annotated[str, Form(alias="status")] = ShiftStatus.open.value,
 ):
     shift = db.get(Shift, shift_id)
@@ -1356,6 +1399,11 @@ def edit_shift_submit(
     if role is not None and role.team.event_id != shift.event_id:
         error = "Aufgabe gehört zu einer anderen Veranstaltung."
     try:
+        parsed_goodiebag_override = _parse_goodiebag_override(goodiebag_override)
+    except ValueError as exc:
+        parsed_goodiebag_override = shift.goodiebag_override
+        error = str(exc)
+    try:
         parsed_status = ShiftStatus(status_value)
     except ValueError:
         parsed_status = shift.status
@@ -1363,7 +1411,13 @@ def edit_shift_submit(
     if error:
         return templates.TemplateResponse(
             "admin_shift_form.html",
-            {"request": request, "shift": shift, "event": shift.event, "error": error},
+            {
+                "request": request,
+                "shift": shift,
+                "event": shift.event,
+                "error": error,
+                "goodiebag_override_value": goodiebag_override,
+            },
             status_code=422,
         )
     shift.title = title.strip()
@@ -1373,13 +1427,18 @@ def edit_shift_submit(
     shift.waitlist_capacity = waitlist_capacity
     shift.role = role
     shift.location = location.strip() or None
+    shift.goodiebag_override = parsed_goodiebag_override
     shift.status = parsed_status
     record_audit(
         db,
         action="shift.updated",
         entity_type="shift",
         entity_id=shift.id,
-        changes={"title": shift.title, "status": shift.status.value},
+        changes={
+            "title": shift.title,
+            "status": shift.status.value,
+            "goodiebag_override": shift.goodiebag_override,
+        },
     )
     db.commit()
     return RedirectResponse(
@@ -2326,7 +2385,14 @@ def export_event_assignments(
     )
     return csv_download(
         f"{event.slug}-schichten.csv",
-        ["Schicht", "Beginn", "Vorname", "Nachname", "Status"],
+        [
+            "Schicht",
+            "Beginn",
+            "Vorname",
+            "Nachname",
+            "Status",
+            "Goodiebag erhalten",
+        ],
         [
             [
                 a.shift.title,
@@ -2334,6 +2400,7 @@ def export_event_assignments(
                 a.volunteer.first_name,
                 a.volunteer.last_name,
                 a.assignment_status.value,
+                "Ja" if a.checkin and a.checkin.goodiebag_received else "Nein",
             ]
             for a in assignments
         ],
@@ -2371,13 +2438,16 @@ def checkin_submit(
 
 @app.post("/admin/check-in/{assignment_id}/check-out", tags=["admin"])
 def checkout_submit(
-    assignment_id: int, db: Session = db_dependency, admin_user=checkin_dependency
+    assignment_id: int,
+    db: Session = db_dependency,
+    admin_user=checkin_dependency,
+    goodiebag_received: Annotated[bool, Form()] = False,
 ):
     assignment = db.get(ShiftAssignment, assignment_id)
     if assignment is None:
         raise HTTPException(status_code=404)
     try:
-        check_out_assignment(db, assignment)
+        check_out_assignment(db, assignment, goodiebag_received=goodiebag_received)
     except CheckInError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return RedirectResponse(url="/admin/check-in", status_code=303)
@@ -2469,11 +2539,30 @@ async def login(request: Request):
 
 
 def authenticated_landing(user, db: Session) -> str:
-    if any(user_has_permission(db, user, name) for name in ("admin", "manager")):
+    permissions = {
+        name
+        for name in ("admin", "manager", "checkin", "police")
+        if has_permission(user, name, db=db)
+    }
+    if permissions & {"admin", "manager"}:
         return "/admin"
-    if user_has_permission(db, user, "checkin"):
+    if "checkin" in permissions:
         return "/admin/check-in"
     return "/"
+
+
+@app.get("/auth/home", tags=["auth"])
+def authenticated_home(request: Request, db: Session = db_dependency):
+    """Resolve the application landing page from database permissions."""
+
+    user = get_current_user(request)
+    if not user:
+        remember_navigation_permissions(request, None, set())
+        return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(
+        url=authenticated_landing(user, db),
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
 
 
 @app.get("/auth/post-login", tags=["auth"])

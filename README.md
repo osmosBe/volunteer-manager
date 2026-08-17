@@ -70,7 +70,8 @@ That separation keeps the same application image usable in Azure Container Apps,
 - Events, teams/areas, roles/tasks, shifts, and capacities
 - Volunteer approval, rejection, assignment, and bulk actions
 - Waiting-list promotion and briefing status
-- Mobile event check-in, QR scan, check-out, and material tracking
+- Mobile event check-in, QR scan, check-out, material returns, and optional
+  Goodiebag hand-out tracking with event defaults and per-shift overrides
 - Print views for shift plans, check-in lists, and QR cards
 - CSV exports for contacts and shifts
 
@@ -160,6 +161,13 @@ DEMO_MODE=true
 administration dashboard. The bundled fallback logo is
 `app/static/images/logo.png`; administrators can still replace it through the
 database-backed Branding page.
+
+Optional privacy and imprint links are also stored in the application database.
+Administrators configure them under `/admin/einstellungen/rechtliches`. Each
+target must be either an external `https://` URL or an intentional
+application-relative path beginning with `/`; leaving a field empty hides that
+link in the global footer. No organization URL is built into the application,
+and changes are recorded in the audit log without storing the complete target.
 
 Never use the banner as a security boundary. It is presentation-only; authentication, authorization, mail delivery, and data retention continue to follow their normal configuration.
 

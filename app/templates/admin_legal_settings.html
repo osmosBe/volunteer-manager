@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% from "components/form_errors.html" import form_error_summary, field_error %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center gap-3 mb-3">
+  <div>
+    <h1 class="mb-1">Rechtliche Links</h1>
+    <p class="text-muted mb-0">Optionale Links zu Datenschutz und Impressum im globalen Seitenfuß.</p>
+  </div>
+  <a class="btn btn-outline-secondary" href="/admin">Zurück</a>
+</div>
+
+{{ form_error_summary(None, field_errors, "legal-settings-errors") }}
+
+<form method="post" action="/admin/einstellungen/rechtliches" class="card">
+  <div class="card-body">
+    <p>Erlaubt sind öffentliche <code>https://</code>-Adressen und bewusst gesetzte interne Pfade, die mit <code>/</code> beginnen. Leere Felder blenden den jeweiligen Link aus.</p>
+    <div class="mb-3">
+      <label class="form-label" for="privacy_url">Datenschutz</label>
+      <input
+        class="form-control{% if field_errors.get('privacy_url') %} is-invalid{% endif %}"
+        id="privacy_url"
+        name="privacy_url"
+        type="text"
+        inputmode="url"
+        maxlength="2048"
+        placeholder="https://example.org/datenschutz oder /datenschutz"
+        value="{{ form_values.privacy_url }}"
+        {% if field_errors.get('privacy_url') %}aria-invalid="true" aria-describedby="privacy_url-error"{% endif %}
+      >
+      {{ field_error("privacy_url", field_errors) }}
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="imprint_url">Impressum</label>
+      <input
+        class="form-control{% if field_errors.get('imprint_url') %} is-invalid{% endif %}"
+        id="imprint_url"
+        name="imprint_url"
+        type="text"
+        inputmode="url"
+        maxlength="2048"
+        placeholder="https://example.org/impressum oder /impressum"
+        value="{{ form_values.imprint_url }}"
+        {% if field_errors.get('imprint_url') %}aria-invalid="true" aria-describedby="imprint_url-error"{% endif %}
+      >
+      {{ field_error("imprint_url", field_errors) }}
+    </div>
+    <button class="btn btn-primary" type="submit">Links speichern</button>
+  </div>
+</form>
+{% endblock %}
